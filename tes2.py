@@ -1,6 +1,10 @@
-logger.info(f"lol")
+import logging
 
-lol = "lol"
+logger = logging.getLogger(__name__)
 
-f"{lol}"
+x = "sondre"
 
+logger.info(f"name {x}")
+logger.info("name {}".format(x))
+logger.info("name {x}".format(x=x))
+logger.info("name %s", x)

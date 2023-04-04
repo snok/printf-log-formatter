@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use anyhow::Result;
 use tokio::fs::{File};
 use tokio::io::{AsyncReadExt};
@@ -5,176 +6,114 @@ use crate::options::Opts;
 use clap::{Parser};
 use futures::future::join_all;
 use tokio::join;
-use rustpython_parser::{parser, ast};
+use rustpython_parser::ast::{Alias, Constant, ConversionFlag, Expr, ExprContext, ExprKind, Mod, Stmt};
+use rustpython_parser::parse_expression;
 use crate::enums::LogLevel;
+use crate::visitor::{Visitor, walk_alias, walk_body, walk_constant, walk_expr};
 
 mod enums;
 mod options;
+mod visitor;
 
 const WORD: &str = "logger.";
 const WORD_LENGTH: usize = 6;
 
-enum SearchingFor {
-    FirstPart,
-    LogLevel,
-    String,
-    Parentheses,
+struct LoggerVisitor {
+    buffer: String,
 }
 
-enum StringFormat {
-    FString,
-    Format,
-    NamedFormat,
-    None,
-}
 
-enum Parentheses {
-    Left,
-    Right
-}
-
-impl Parentheses {
-    fn ch(&self) -> char {
-        match self {
-            Self::Left => '(',
-            Self::Right => ')'
+impl<'a> Visitor<'a> for LoggerVisitor {
+    fn visit_expr(&mut self, expr: &'a Expr) {
+        match &expr.node {
+            ExprKind::JoinedStr { values } => {
+                for value in values {
+                    self.unparse_fstring_elem(value);
+                }
+            }
+            _ => ()
         }
     }
 }
 
+impl LoggerVisitor {
+    fn unparse_fstring_str(&mut self, s: &str) {
+        let s = s.replace('{', "{{").replace('}', "}}");
+        self.p(&s);
+    }
+    fn unparse_fstring_elem<U>(&mut self, expr: &Expr<U>) {
+        match &expr.node {
+            ExprKind::Constant { value, .. } => {
+                if let Constant::Str(s) = value {
+                    self.unparse_fstring_str(s);
+                } else {
+                    println!("1");
+                    unreachable!()
+                }
+            }
+            ExprKind::JoinedStr { values } => self.unparse_fstring_body(values),
+            ExprKind::FormattedValue {
+                value,
+                conversion,
+                format_spec,
+            } => self.unparse_formatted(value, *conversion, format_spec.as_deref()),
 
-async fn lol(filename: String) -> Result<()> {
-    let mut file = File::open(filename).await?;
+            _ =>
+                {
+                    println!("2");
+                    unreachable!()
+                },
+        }
+    }
+    fn unparse_fstring_body<U>(&mut self, values: &[Expr<U>]) {
+        for value in values {
+            self.unparse_fstring_elem(value);
+        }
+    }
+    fn p(&mut self, s: &str) {
+        self.buffer += s;
+    }
+
+    fn unparse_formatted<U>(&mut self, val: &Expr<U>, conversion: usize, spec: Option<&Expr<U>>) {
+        let brace = if self.buffer.starts_with('{') {
+            // put a space to avoid escaping the bracket
+            "{ "
+        } else {
+            "{"
+        };
+        self.p(brace);
+        self.buffer += &generator.buffer;
+
+        if conversion != ConversionFlag::None as usize {
+            self.p("!");
+            #[allow(clippy::cast_possible_truncation)]
+            self.p(&format!("{}", conversion as u8 as char));
+        }
+
+        if let Some(spec) = spec {
+            self.p(":");
+            self.unparse_fstring_elem(spec);
+        }
+
+        self.p("}");
+    }
+}
+
+async fn fix_file(filename: String) -> Result<()> {
+    // Read file - TODO: Use BufReader?
+    let mut file = File::open(&filename).await?;
     let mut contents = String::new();
     file.read_to_string(&mut contents).await?;
 
-    // Start by looking for l, then o, then g, until we get to "logger."
-    let mut next = 0;
-    let mut searching_for = SearchingFor::FirstPart;
-    let mut format = StringFormat::None;
-    let mut log_level_chars = String::new();
-    let mut parentheses = Parentheses::Left;
+    // Parse AST
+    let python_ast = parse_expression(&contents, &filename).unwrap();
 
-    let previous_character_was_escape = false;
-    let mut quote_count = 0;
-
-    let mut string_chars = String::new();
-
-    // TODO: Ignore whitespace for all modes except string
-
-    for (index, ch) in contents.chars().enumerate() {
-        match searching_for {
-            // Keep traversing until we get to `logger.` then switch mode
-            SearchingFor::FirstPart => {
-                let _next_letter: char = WORD.chars().nth(next).unwrap();
-                if ch == _next_letter {
-                    // Switch mode
-                    if next == WORD_LENGTH {
-                        println!("Found the whole word, switching to search for log level");
-                        searching_for = SearchingFor::LogLevel;
-                        next = 0;
-                        continue;
-                        // Keep looking
-                    } else {
-                        println!("Character matched {}", next);
-                        next += 1;
-                        continue;
-                    }
-                } else {
-                    println!("Reset");
-                    next = 0;
-                    continue
-                };
-            }
-
-            // Keep traversing until we finish one of the log levels
-            SearchingFor::LogLevel => {
-                log_level_chars.push(ch);
-
-                match LogLevel::any_options_starts_with(&log_level_chars) {
-                    Err(_) => {
-                        println!("Invalid logger name: `{}`. Resetting", log_level_chars);
-                        searching_for = SearchingFor::FirstPart;
-                        log_level_chars = String::new();
-                        continue
-                    },
-                    Ok(t) => match t {
-                        Some(t) => {
-                            println!("Valid loger name `{}`. Switching modes", log_level_chars);
-                            searching_for = SearchingFor::Parentheses;
-                            log_level_chars = String::new();
-                            continue
-                        },
-                        None => continue
-                    }
-                }
-            }
-            SearchingFor::Parentheses => {
-                match parentheses {
-                    Parentheses::Left => {
-                        if ch == '(' {
-                            println!("Found left paren");
-                            searching_for = SearchingFor::String;
-                            parentheses = Parentheses::Right;
-                            continue
-                        } else {
-                            println!("Didn't find parentheses. Resetting");
-                            searching_for = SearchingFor::FirstPart;
-                            continue
-                        }
-                    }
-                    Parentheses::Right => {
-                        if ch == ')' {
-                            println!("Found right paren");
-                            searching_for = SearchingFor::String;
-                            parentheses = Parentheses::Left;
-                            continue
-                        } else {
-                            println!("Didn't find parentheses. Resetting");
-                            searching_for = SearchingFor::FirstPart;
-                            continue
-                        }
-                    }
-                }
-            }
-            // Keep traversing until we find a { or whatever
-            SearchingFor::String => {
-
-                match format {
-                    StringFormat::None => {
-                        if string_chars.is_empty() && ch == 'f' {
-                            println!("It's an f-string!");
-                            format = StringFormat::FString;
-                            continue
-                        }
-
-                        if string_chars.is_empty() && ch == '"' {
-                            quote_count += 1;
-                        }
-
-                    },
-                    StringFormat::FString {
-
-                    }
-                }
-
-
-                string_chars.push(ch);
-
-
-                // f-string start case
-                // start quotes
-                // end quotes
-                // variables after if not f-string
-
-                println!("string: {}", string_chars);
-            }
-        }
+    // Walk AST
+    println!("{:?}\n", python_ast);
+    let mut visitor = LoggerVisitor {
+        buffer: "".to_string(),
     };
-
-    // contents.insert_str(0, "\n");
-    // file.seek(SeekFrom::Start(0)).await?;
-    // file.write_all(contents.as_bytes()).await?;
+    visitor::walk_expr(&mut visitor, &python_ast);
     Ok(())
 }
 
@@ -187,7 +126,7 @@ async fn main() -> Result<()> {
     let mut tasks = vec![];
     for filename in opts.filenames {
         if filename.ends_with(".py") {
-            tasks.push(tokio::task::spawn(lol(filename)));
+            tasks.push(tokio::task::spawn(fix_file(filename)));
         }
     }
 
