@@ -1,5 +1,5 @@
 use crate::enums::LogLevel;
-use clap::{Parser};
+use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = "Printf log formatter")]

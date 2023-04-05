@@ -652,6 +652,7 @@ dependencies = [
  "anyhow",
  "clap",
  "futures",
+ "regex",
  "rustpython-parser",
  "tokio",
 ]
