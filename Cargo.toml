@@ -8,7 +8,10 @@ description = "Printf log formatter"
 [dependencies]
 anyhow = "1.0.70"
 clap = { version = "4.1.8", default-features = false, features=["std", "derive"] }
+env_logger = "0.10.0"
 futures = "0.3.28"
+log = "0.4.17"
+regex = "1.7.3"
 rustpython-parser = { features = [
   "lalrpop",
   "serde",

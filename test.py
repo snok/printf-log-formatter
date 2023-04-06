@@ -2,5 +2,4 @@
 #
 # logger = logging.getLogger(__name__)
 #
-logger.info(f"name {x}")
-# logger.info("name {x}".format(x=x))
+logger.info("{y:02f} - {x} - {y} * {x} + {} = {}".format(5, 4, x=2, y=1))

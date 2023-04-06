@@ -1,3 +1,4 @@
+#[allow(dead_code, unused)]
 use rustpython_parser::ast::{
     Alias, Arg, Arguments, Boolop, Cmpop, Comprehension, Constant, Excepthandler,
     ExcepthandlerKind, Expr, ExprContext, ExprKind, Keyword, MatchCase, Operator, Pattern,
@@ -562,7 +563,8 @@ pub fn walk_pattern<'a, V: Visitor<'a> + ?Sized>(visitor: &mut V, pattern: &'a P
 pub fn walk_expr_context<'a, V: Visitor<'a> + ?Sized>(
     visitor: &mut V,
     expr_context: &'a ExprContext,
-) {}
+) {
+}
 
 #[allow(unused_variables)]
 pub fn walk_boolop<'a, V: Visitor<'a> + ?Sized>(visitor: &mut V, boolop: &'a Boolop) {}
