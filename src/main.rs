@@ -276,26 +276,24 @@ async fn fix_file(filename: String) -> Result<bool> {
 
     let mut vec_content = content.split("\n").map(|e| e.to_owned()).collect::<Vec<String>>();
 
-
+    let mut popped_rows = 0;
     for change in &visitor.changes {
-
-        println!("{}", change.lineno);
-        println!("{}", change.col_offset);
-        println!("{}", change.end_lineno);
-        println!("{}", change.end_col_offset);
-
-
-        vec_content[change.lineno - 1].replace_range(
+        vec_content[change.lineno - 1 - popped_rows].replace_range(
             &change.col_offset..,
             &change.new_logger
         );
-        for row in (change.lineno)..change.end_lineno -1 {
-            vec_content[row] = String::new();
-        }
-        vec_content[change.end_lineno-1].replace_range(
+        vec_content[change.end_lineno-1 - popped_rows].replace_range(
             ..change.end_col_offset,
             ""
         );
+        // Delete any in-between rows since these will now be empty
+        for row in ((change.lineno)..change.end_lineno) {
+            println!("Popping index {} - {} == {}", row, popped_rows, row-popped_rows);
+            println!("Row {}", vec_content[row-popped_rows]);
+            vec_content.remove(row-popped_rows);
+            popped_rows += 1;
+            println!(".");
+        }
     }
 
     // Write updated content back to file

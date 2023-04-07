@@ -3,18 +3,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 logger.info(
-    "%s - %s - %s * %s + %s = %s", 1, 2, 1, 2, 5, 4
-
-
-
-
-
+    "{y:02f} - {x} - {y} * {x} + {} = {}".format(
+        5,
+        4,
+        x=2,
+        y=1
+    )
 )
-logger.info("%s - %s - %s * %s + %s = %s", 1, 2, 1, 2, 5, 4
-
-
-
-
+logger.info("{y:02f} - {x} - {y} * {x} + {} = {}".format(5,
+        4,
+        x=2,
+        y=1
+    )
 )
 
 # # Actual
