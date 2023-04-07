@@ -2,10 +2,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+zz = 2
+
 logger.info(
     "{y:02f} - {x} - {y} * {x} + {} = {}".format(
         5,
-        4,
+        zz,
         x=2,
         y=1
     )
@@ -16,6 +18,7 @@ logger.info("{y:02f} - {x} - {y} * {x} + {} = {}".format(5,
         y=1
     )
 )
+logger.info("{y:02f} - {x} - {y} * {x} + {} = {}".format(5, 4, x=2, y=1))
 
 # # Actual
 # lineno 6

@@ -36,7 +36,7 @@ struct NamedArg {
 
 #[derive(Debug)]
 struct Arg {
-    value: Constant,
+    value: String,
 }
 
 fn constant_to_string(constant: Constant) -> String {
@@ -86,6 +86,8 @@ fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>)
     let mut format_args: Vec<Arg> = vec![]; // .format(var=var) or .format(var)
     let mut string = String::new();
 
+    println!("{:?}", args);
+
     if let ExprKind::Attribute { value, attr, ctx } = &func.node {
         if attr != "format" {
             info!("Function call was not for .format; returning early");
@@ -111,7 +113,7 @@ fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>)
                 } else {
                     info!("Found unnamed argument with value {:?}", value);
                     format_args.push(Arg {
-                        value: value.clone(),
+                        value: constant_to_string(value.clone()),
                     })
                 }
             }
@@ -122,8 +124,12 @@ fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>)
         if let ExprKind::Constant { value, kind } = &arg.node {
             info!("Found unnamed argument with value {:?}", value);
             format_args.push(Arg {
-                value: value.clone(),
+                value: constant_to_string(value.clone()),
             })
+        }
+        if let ExprKind::Name { id, ctx } = &arg.node {
+            info!("Found unnamed argument with variable name {:?}", id);
+            format_args.push(Arg { value: id.to_string() })
         }
     }
 
@@ -177,21 +183,19 @@ fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>)
         // Replace a {} with %s
         new_string = new_string.replacen("{}", "%s", 1);
 
-        // Convert Rust type to a string value
-        let str_value = constant_to_string(arg.value);
-
         match ordered_arguments.iter().position(|x| x.is_none()) {
-            Some(index) => ordered_arguments[index] = Some(str_value),
+            Some(index) => ordered_arguments[index] = Some(arg.value),
             None => {
                 // This will happen for syntax like
                 //  logger.info("{}".format(1,2))
                 // where there are more arguments passed than mapped to.
                 // We could ignore these cases, but if we silently fixed them
                 // that might cause other problems for the user ¯\_(ツ)_/¯
-                panic!("Found excess argument `{str_value}` in logger. Run with RUST_LOG=debug for verbose logging.")
+                panic!("Found excess argument `{}` in logger. Run with RUST_LOG=debug for verbose logging.", arg.value)
             }
         }
     }
+    println!("{:?}", ordered_arguments);
     let string_addon = ordered_arguments
         .iter()
         .map(|s| s.clone().unwrap())
@@ -222,7 +226,6 @@ impl<'a> Visitor<'a> for LoggerVisitor {
                     println!("col_offset {}", self.changes[0].col_offset);
                     println!("end_lineno {}", self.changes[0].end_lineno);
                     println!("end_col_offset {}", self.changes[0].end_col_offset);
-
                 } else {
                     self.visit_expr(func);
                     for expr in args {
@@ -278,21 +281,28 @@ async fn fix_file(filename: String) -> Result<bool> {
 
     let mut popped_rows = 0;
     for change in &visitor.changes {
-        vec_content[change.lineno - 1 - popped_rows].replace_range(
+        if change.lineno != change.end_lineno {
+                    vec_content[change.lineno - 1 - popped_rows].replace_range(
             &change.col_offset..,
             &change.new_logger
         );
-        vec_content[change.end_lineno-1 - popped_rows].replace_range(
-            ..change.end_col_offset,
-            ""
+            vec_content[change.end_lineno - 1 - popped_rows].replace_range(
+                ..change.end_col_offset,
+                "",
+            );
+            // Delete any in-between rows since these will now be empty
+            for row in change.lineno..change.end_lineno {
+                println!("Popping index {} - {} == {}", row, popped_rows, row - popped_rows);
+                println!("Row {}", vec_content[row - popped_rows]);
+                vec_content.remove(row - popped_rows);
+                popped_rows += 1;
+                println!(".");
+            }
+        } else {
+                    vec_content[change.lineno - 1 - popped_rows].replace_range(
+            &change.col_offset..&change.end_col_offset,
+            &change.new_logger
         );
-        // Delete any in-between rows since these will now be empty
-        for row in ((change.lineno)..change.end_lineno) {
-            println!("Popping index {} - {} == {}", row, popped_rows, row-popped_rows);
-            println!("Row {}", vec_content[row-popped_rows]);
-            vec_content.remove(row-popped_rows);
-            popped_rows += 1;
-            println!(".");
         }
     }
 
