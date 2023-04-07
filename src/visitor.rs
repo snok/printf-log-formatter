@@ -18,27 +18,13 @@ pub trait Visitor<'a> {
     fn visit_constant(&mut self, constant: &'a Constant) {
         walk_constant(self, constant);
     }
-    fn visit_expr_context(&mut self, expr_context: &'a ExprContext) {
-        walk_expr_context(self, expr_context);
-    }
-    fn visit_boolop(&mut self, boolop: &'a Boolop) {
-        walk_boolop(self, boolop);
-    }
-    fn visit_operator(&mut self, operator: &'a Operator) {
-        walk_operator(self, operator);
-    }
-    fn visit_unaryop(&mut self, unaryop: &'a Unaryop) {
-        walk_unaryop(self, unaryop);
-    }
-    fn visit_cmpop(&mut self, cmpop: &'a Cmpop) {
-        walk_cmpop(self, cmpop);
-    }
-    fn visit_comprehension(&mut self, comprehension: &'a Comprehension) {
-        walk_comprehension(self, comprehension);
-    }
-    fn visit_excepthandler(&mut self, excepthandler: &'a Excepthandler) {
-        walk_excepthandler(self, excepthandler);
-    }
+    fn visit_expr_context(&mut self, expr_context: &'a ExprContext) {walk_expr_context(self, expr_context);}
+    fn visit_boolop(&mut self, boolop: &'a Boolop) {walk_boolop(self, boolop);}
+    fn visit_operator(&mut self, operator: &'a Operator) {walk_operator(self, operator);}
+    fn visit_unaryop(&mut self, unaryop: &'a Unaryop) {walk_unaryop(self, unaryop);}
+    fn visit_cmpop(&mut self, cmpop: &'a Cmpop) {walk_cmpop(self, cmpop);}
+    fn visit_comprehension(&mut self, comprehension: &'a Comprehension) {walk_comprehension(self, comprehension);}
+    fn visit_excepthandler(&mut self, excepthandler: &'a Excepthandler) {walk_excepthandler(self, excepthandler);}
     fn visit_format_spec(&mut self, format_spec: &'a Expr) {
         walk_expr(self, format_spec);
     }

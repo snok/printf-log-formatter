@@ -7,22 +7,24 @@ use log::{debug, info};
 use regex::Regex;
 use rustpython_parser::ast::{Constant, Location};
 use rustpython_parser::ast::{Expr, ExprKind, Keyword, KeywordData};
-use rustpython_parser::parse_expression;
+use rustpython_parser::{parse_expression, parse_program};
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod enums;
 mod options;
 mod visitor;
 
-struct LoggerVisitor;
+struct LoggerVisitor {
+    changes: Vec<Change>,
+}
 
 #[derive(Debug)]
 struct Change {
-    start_row: usize,
-    start_col: usize,
-    end_row: usize,
-    end_col: usize,
+    lineno: usize,
+    col_offset: usize,
+    end_lineno: usize,
+    end_col_offset: usize,
     new_logger: String,
 }
 
@@ -171,7 +173,6 @@ fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>)
 
     // Args are captured in order, so we should be able to just fill in the missing ordered arguments.
     // One nice assumption we can make here is that each arg is unique and only appears once.
-
     for arg in format_args {
         // Replace a {} with %s
         new_string = new_string.replacen("{}", "%s", 1);
@@ -198,57 +199,11 @@ fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>)
         .join(", ");
 
     debug!("After handling args the new string is {}", new_string);
-    Some(format!("(\"{}\", {})", new_string, string_addon))
+    Some(format!("\"{}\", {}", new_string, string_addon))
 }
 
-impl<'a> Visitor<'a> for LoggerVisitor {}
-
-// fn go_for_a_walkie<'a, V: Visitor<'a> + ?Sized>(visitor: &mut V, expr: &'a Expr) -> Vec<Change> {
-//     let mut changes = vec![];
-//     match &expr.node {
-//         ExprKind::Call {
-//             func,
-//             args,
-//             keywords,
-//         } => {
-//             if let Some(new_logger) = check_for_format(func, args, keywords) {
-//                 changes.push(Change {
-//                     start_row: expr.location.row(),
-//                     start_col: expr.location.column(),
-//                     end_row: expr.end_location.unwrap().row(),
-//                     end_col: expr.end_location.unwrap().column(),
-//                     new_logger,
-//                 });
-//             }
-//         }
-//         ExprKind::JoinedStr { values } => {
-//             for value in values {
-//                 match &value.node {
-//                     ExprKind::Constant { value, kind } => {
-//                         println!("constant: {:?} of kind {:?}", value, kind);
-//                     }
-//                     ExprKind::FormattedValue {
-//                         value,
-//                         conversion,
-//                         format_spec,
-//                     } => {
-//                         println!(
-//                             "fmtval: {:?} conversion {:?} and spec {:?}",
-//                             value, conversion, format_spec
-//                         );
-//                     }
-//                     _ => unreachable!(),
-//                 }
-//             }
-//         }
-//         _ => (),
-//     }
-//     changes
-// }
-
 impl<'a> Visitor<'a> for LoggerVisitor {
-    fn visit_expr(&mut self, expr: &'a Expr) -> Vec<Change> {
-        let mut changes = vec![];
+    fn visit_expr(&mut self, expr: &'a Expr) {
         match &expr.node {
             ExprKind::Call {
                 func,
@@ -256,13 +211,26 @@ impl<'a> Visitor<'a> for LoggerVisitor {
                 keywords,
             } => {
                 if let Some(new_logger) = check_for_format(func, args, keywords) {
-                    changes.push(Change {
-                        start_row: expr.location.row(),
-                        start_col: expr.location.column(),
-                        end_row: expr.end_location.unwrap().row(),
-                        end_col: expr.end_location.unwrap().column(),
+                    self.changes.push(Change {
+                        lineno: expr.location.row(),
+                        col_offset: expr.location.column(),
+                        end_lineno: expr.end_location.unwrap().row(),
+                        end_col_offset: expr.end_location.unwrap().column(),
                         new_logger,
                     });
+                    println!("lineno {}", self.changes[0].lineno);
+                    println!("col_offset {}", self.changes[0].col_offset);
+                    println!("end_lineno {}", self.changes[0].end_lineno);
+                    println!("end_col_offset {}", self.changes[0].end_col_offset);
+
+                } else {
+                    self.visit_expr(func);
+                    for expr in args {
+                        self.visit_expr(expr);
+                    }
+                    for keyword in keywords {
+                        self.visit_keyword(keyword);
+                    }
                 }
             }
             ExprKind::JoinedStr { values } => {
@@ -287,7 +255,6 @@ impl<'a> Visitor<'a> for LoggerVisitor {
             }
             _ => (),
         }
-        changes
     }
 }
 
@@ -301,17 +268,43 @@ async fn fix_file(filename: String) -> Result<bool> {
         .read_to_string(&mut content)
         .await?;
 
-    // Parse AST
-    let python_ast = parse_expression(&content, &filename).unwrap();
+    // Parse and walk AST
+    let mut visitor = LoggerVisitor { changes: vec![] };
+    for stmt in parse_program(&content, &filename).unwrap() {
+        visitor::walk_stmt(&mut visitor, &stmt);
+    }
 
-    // Walk AST
-    // println!("{:?}\n", python_ast);
-    let mut visitor = LoggerVisitor {};
-    let changes = go_for_a_walkie(&mut visitor, &python_ast);
+    let mut vec_content = content.split("\n").map(|e| e.to_owned()).collect::<Vec<String>>();
 
-    println!("Found changes: {:?}", changes);
 
-    Ok(true) // TODO: only return true if we've made changes
+    for change in &visitor.changes {
+
+        println!("{}", change.lineno);
+        println!("{}", change.col_offset);
+        println!("{}", change.end_lineno);
+        println!("{}", change.end_col_offset);
+
+
+        vec_content[change.lineno - 1].replace_range(
+            &change.col_offset..,
+            &change.new_logger
+        );
+        for row in (change.lineno)..change.end_lineno -1 {
+            vec_content[row] = String::new();
+        }
+        vec_content[change.end_lineno-1].replace_range(
+            ..change.end_col_offset,
+            ""
+        );
+    }
+
+    // Write updated content back to file
+    File::create(&filename)
+        .await?
+        .write_all(vec_content.join("\n").as_bytes())
+        .await?;
+
+    Ok(!visitor.changes.is_empty())
 }
 
 #[tokio::main]
