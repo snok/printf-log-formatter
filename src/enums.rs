@@ -9,3 +9,18 @@ pub enum LogLevel {
     Exception,
     Critical,
 }
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Quotes {
+    Single,
+    Double
+}
+
+impl Quotes {
+    pub fn char(&self) -> char {
+        match self {
+            Self::Single => '\'',
+            Self::Double => '"'
+        }
+    }
+}

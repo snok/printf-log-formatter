@@ -20,3 +20,20 @@ logger.info("%s", name)
 
 ## Motivations
 https://blog.pilosus.org/posts/2020/01/24/python-f-strings-in-logging/
+
+```yaml
+- repo: https://github.com/sondrelg/printf-log-formatter
+  hooks:
+    - id: printf-log-formatter
+      args:
+        - --quotes=single  # or double
+```
+
+## TODO:
+
+- [ ] Add tests for .format
+- [ ] Add support for f-string
+- [ ] Sprinkle inn appropriate logging
+- [ ] Add appropriate tests
+- [ ] Test on Cloud
+- [ ] Make public

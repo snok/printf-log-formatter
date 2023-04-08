@@ -18,3 +18,8 @@ rustpython-parser = { features = [
 ], git = "https://github.com/RustPython/RustPython.git", rev = "c15f670f2c30cfae6b41a1874893590148c74bc4" }
 # TODO: Trim features
 tokio = { version = "1.27.0", features = ["fs", "macros", "full"] }
+ruff_python_ast = { git = "https://github.com/charliermarsh/ruff.git", package = "ruff_python_ast", rev="29ec6df24f657d96af3165e81a7a10e444b6e515"}
+
+[dev-dependencies]
+assert-panic = "*"
+tokio-test = "*"

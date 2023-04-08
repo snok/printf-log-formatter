@@ -1,5 +1,7 @@
-use crate::enums::LogLevel;
+use crate::enums::{LogLevel, Quotes};
 use clap::Parser;
+
+
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = "Printf log formatter")]
@@ -10,4 +12,7 @@ pub struct Opts {
 
     #[arg(short, long, value_delimiter = ',')]
     pub filenames: Vec<String>,
+
+    #[arg(value_enum, short, long, default_value_t = Quotes::Single)]
+    pub quotes: Quotes,
 }
