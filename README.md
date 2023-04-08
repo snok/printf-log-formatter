@@ -31,7 +31,7 @@ https://blog.pilosus.org/posts/2020/01/24/python-f-strings-in-logging/
 
 ## TODO:
 
-- [ ] Add tests for .format
+- [x] Add tests for .format
 - [ ] Add support for f-string
 - [ ] Sprinkle inn appropriate logging
 - [ ] Add appropriate tests

@@ -1,19 +1,23 @@
-use crate::options::Opts;
+use std::sync::{Arc, Mutex};
+use crate::cli::Opts;
 
+use crate::ast::LoggerVisitor;
+use crate::enums::Quotes;
 use anyhow::Result;
 use clap::Parser;
 use futures::future::join_all;
-use log::{info};
+use log::info;
 use ruff_python_ast::visitor::walk_stmt;
-use rustpython_parser::{parse_program};
+use rustpython_parser::parse_program;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use crate::ast::LoggerVisitor;
-use crate::enums::Quotes;
-mod enums;
-mod options;
-mod format;
+use tokio::sync::RwLock;
+
 mod ast;
+mod enums;
+mod format;
+mod fstring;
+mod cli;
 
 #[derive(Debug)]
 struct Change {
@@ -22,7 +26,7 @@ struct Change {
     end_lineno: usize,
     end_col_offset: usize,
     new_string_content: String,
-    new_string_variables: String,
+    new_string_variables: Vec<String>,
 }
 
 async fn get_changes(content: &str, filename: &str) -> Vec<Change> {
@@ -30,7 +34,7 @@ async fn get_changes(content: &str, filename: &str) -> Vec<Change> {
     for stmt in parse_program(content, filename).unwrap() {
         walk_stmt(&mut visitor, &stmt);
     }
-    return visitor.changes
+    return visitor.changes;
 }
 
 async fn fix_content(content: String, filename: &str, quotes: &Quotes) -> Result<(Vec<u8>, bool)> {
@@ -40,34 +44,37 @@ async fn fix_content(content: String, filename: &str, quotes: &Quotes) -> Result
     let mut popped_rows = 0;
 
     for change in &changes {
-        let new_logger = format!("{}{}{}, {}", quotes.char(), change.new_string_content, quotes.char(), change.new_string_variables);
+        let new_logger = format!(
+            "{}{}{}, {}",
+            quotes.char(),
+            change.new_string_content,
+            quotes.char(),
+            change.new_string_variables.join(", ")
+        );
 
         if change.lineno != change.end_lineno {
-            vec_content[change.lineno - 1 - popped_rows].replace_range(
-                &change.col_offset..,
-                &new_logger,
-            );
-            vec_content[change.end_lineno - 1 - popped_rows].replace_range(
-                ..change.end_col_offset,
-                "",
-            );
+            vec_content[change.lineno - 1 - popped_rows]
+                .replace_range(&change.col_offset.., &new_logger);
+            vec_content[change.end_lineno - 1 - popped_rows]
+                .replace_range(..change.end_col_offset, "");
             // Delete any in-between rows since these will now be empty
             for row in change.lineno..change.end_lineno {
                 vec_content.remove(row - popped_rows);
                 popped_rows += 1;
             }
         } else {
-            vec_content[change.lineno - 1 - popped_rows].replace_range(
-                &change.col_offset..&change.end_col_offset,
-                &new_logger,
-            );
+            vec_content[change.lineno - 1 - popped_rows]
+                .replace_range(&change.col_offset..&change.end_col_offset, &new_logger);
         }
     }
-    Ok((vec_content.join("\n").as_bytes().to_owned(), !changes.is_empty()))
+    Ok((
+        vec_content.join("\n").as_bytes().to_owned(),
+        !changes.is_empty(),
+    ))
 }
 
-async fn fix_file(filename: String, quotes: Quotes) -> Result<bool> {
-    info!("Processing file {filename}");
+async fn fix_file(filename: String, settings: Arc<RwLock<Opts>>) -> Result<bool> {
+    info!("Processing file {}", filename);
 
     // Read file into string
     let mut content = String::new();
@@ -76,7 +83,8 @@ async fn fix_file(filename: String, quotes: Quotes) -> Result<bool> {
         .read_to_string(&mut content)
         .await?;
 
-    let (fixed_content, changed) = fix_content(content, &filename, &quotes).await?;
+    let unlocked_settings = settings.read().await;
+    let (fixed_content, changed) = fix_content(content, &filename, &unlocked_settings.quotes).await?;
 
     // Write updated content back to file
     File::create(&filename)
@@ -90,13 +98,16 @@ async fn fix_file(filename: String, quotes: Quotes) -> Result<bool> {
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+
+    // Load CLI arguments
     let opts = Opts::parse();
+    let settings = Arc::new(RwLock::new(opts.clone()));
 
     // Fix files concurrently
     let mut tasks = vec![];
     for filename in opts.filenames {
         if filename.ends_with(".py") {
-            tasks.push(tokio::task::spawn(fix_file(filename, opts.quotes.clone())));
+            tasks.push(tokio::task::spawn(fix_file(filename.clone(), Arc::clone(&settings))));
         }
     }
     let results = join_all(tasks).await;
@@ -118,7 +129,7 @@ mod tests {
     }
 
     #[rustfmt::skip]
-    fn test_cases() -> Vec<TestCase> {
+    fn format_test_cases() -> Vec<TestCase> {
         vec![
             // Simple
             TestCase { input: "logger.info('{}'.format(1))".to_string(), expected_output: "logger.info('%s', 1)".to_string() },
@@ -144,8 +155,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_fix_content__format() {
-        for test_case in test_cases() {
-            let (content, changed) = fix_content(test_case.input, "filename", &Quotes::Single).await.unwrap();
+        for test_case in format_test_cases() {
+            let (content, changed) = fix_content(test_case.input, "filename", &Quotes::Single)
+                .await
+                .unwrap();
             assert_eq!(String::from_utf8_lossy(&content), test_case.expected_output);
         }
     }
@@ -158,10 +171,36 @@ mod tests {
                     "logger.info('{}'.format(1,2))".to_string(),
                     "filename",
                     &Quotes::Single,
-                ).await.unwrap();
+                )
+                .await
+                .unwrap();
             }),
             String,
             "Found excess argument `2` in logger. Run with RUST_LOG=debug for verbose logging.",
         );
+    }
+
+    #[rustfmt::skip]
+    fn fstring_test_cases() -> Vec<TestCase> {
+        vec![
+            // Simple
+            TestCase { input: "logger.info(f'{1}')".to_string(), expected_output: "logger.info('%s', 1)".to_string() },
+            // With formatting
+            TestCase { input: "logger.info(f'{1:02f}')".to_string(), expected_output: "logger.info('%s', 1)".to_string() },
+            // Variable
+            TestCase { input: "logger.info(f'{foo}')".to_string(), expected_output: "logger.info('%s', foo)".to_string() },
+            // Packed single line
+            TestCase { input: "logger.info(f'{1}') or 1 + 1 == 3".to_string(), expected_output: "logger.info('%s', 1) or 1 + 1 == 3".to_string() },
+        ]
+    }
+
+    #[tokio::test]
+    async fn test_fix_content__fstring() {
+        for test_case in fstring_test_cases() {
+            let (content, changed) = fix_content(test_case.input, "filename", &Quotes::Single)
+                .await
+                .unwrap();
+            assert_eq!(String::from_utf8_lossy(&content), test_case.expected_output);
+        }
     }
 }

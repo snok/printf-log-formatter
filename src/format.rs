@@ -1,8 +1,8 @@
 #![allow(unused_variables)]
+use crate::ast::constant_to_string;
 use log::{debug, info};
 use regex::Regex;
 use rustpython_parser::ast::{Constant, Expr, ExprKind, Keyword, KeywordData};
-use crate::ast::constant_to_string;
 
 #[derive(Debug)]
 struct NamedArg {
@@ -11,7 +11,7 @@ struct NamedArg {
 }
 
 #[derive(Debug)]
-struct Arg {
+pub struct Arg {
     value: String,
 }
 
@@ -36,7 +36,11 @@ fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {
 }
 
 /// Look for logger.error("string {var}.format(var=var)) syntax
-pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>) -> Option<(String, String)> {
+pub fn check_for_format(
+    func: &Box<Expr>,
+    args: &Vec<Expr>,
+    keywords: &Vec<Keyword>,
+) -> Option<(String, Vec<String>)> {
     let mut format_named_args: Vec<NamedArg> = vec![]; // .format(var=var) or .format(var)
     let mut format_args: Vec<Arg> = vec![]; // .format(var=var) or .format(var)
     let mut string = String::new();
@@ -70,13 +74,13 @@ pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keywo
                             value: constant_to_string(value.clone()),
                         })
                     }
-                },
+                }
                 ExprKind::Name { id, ctx } => {
                     info!("Found named argument with variable name {id}");
                     format_args.push(Arg {
                         value: id.to_string(),
                     })
-                },
+                }
                 _ => {
                     unreachable!()
                 }
@@ -85,7 +89,6 @@ pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keywo
     }
 
     for arg in args {
-
         println!("---\n{:?}\n---", arg);
 
         if let ExprKind::Constant { value, kind } = &arg.node {
@@ -96,7 +99,9 @@ pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keywo
         }
         if let ExprKind::Name { id, ctx } = &arg.node {
             info!("Found unnamed argument with variable name {:?}", id);
-            format_args.push(Arg { value: id.to_string() })
+            format_args.push(Arg {
+                value: id.to_string(),
+            })
         }
     }
 
@@ -149,7 +154,6 @@ pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keywo
     // One nice assumption we can make here is that each arg is unique and only appears once.
     let any_curly_brace_re = Regex::new(r"\{[^{}]*(:[^{}]*)?\}").unwrap();
     for arg in format_args {
-
         let mat = match any_curly_brace_re.find(&new_string) {
             Some(t) => t,
             None => {
@@ -174,8 +178,7 @@ pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keywo
     let string_addon = ordered_arguments
         .iter()
         .map(|s| s.clone().unwrap())
-        .collect::<Vec<_>>()
-        .join(", ");
+        .collect();
 
     debug!("After handling args the new string is {}", new_string);
     Some((new_string, string_addon))

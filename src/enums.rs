@@ -13,14 +13,14 @@ pub enum LogLevel {
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Quotes {
     Single,
-    Double
+    Double,
 }
 
 impl Quotes {
     pub fn char(&self) -> char {
         match self {
             Self::Single => '\'',
-            Self::Double => '"'
+            Self::Double => '"',
         }
     }
 }

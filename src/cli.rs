@@ -1,9 +1,7 @@
 use crate::enums::{LogLevel, Quotes};
 use clap::Parser;
 
-
-
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = "Printf log formatter")]
 #[command(next_line_help = true)]
 pub struct Opts {
