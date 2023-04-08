@@ -4,17 +4,16 @@ use anyhow::Result;
 use clap::Parser;
 use futures::future::join_all;
 use log::{info};
-use ruff_python_ast::visitor;
-use rustpython_parser::ast::{Expr, ExprKind};
+use ruff_python_ast::visitor::walk_stmt;
 use rustpython_parser::{parse_program};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use crate::ast::LoggerVisitor;
 use crate::enums::Quotes;
-use crate::format::check_for_format;
-use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
 mod enums;
 mod options;
 mod format;
+mod ast;
 
 #[derive(Debug)]
 struct Change {
@@ -24,67 +23,6 @@ struct Change {
     end_col_offset: usize,
     new_string_content: String,
     new_string_variables: String,
-}
-
-struct LoggerVisitor {
-    changes: Vec<Change>,
-}
-
-impl<'a> Visitor<'a> for LoggerVisitor {
-    fn visit_expr(&mut self, expr: &'a Expr) {
-        match &expr.node {
-            ExprKind::BoolOp { op, values } => {
-                for expr in values {
-                    self.visit_expr(expr);
-                }
-            },
-            ExprKind::Call {
-                func,
-                args,
-                keywords,
-            } => {
-                if let Some((new_string_content, new_string_variables)) = check_for_format(func, args, keywords) {
-                    self.changes.push(Change {
-                        lineno: expr.location.row(),
-                        col_offset: expr.location.column(),
-                        end_lineno: expr.end_location.unwrap().row(),
-                        end_col_offset: expr.end_location.unwrap().column(),
-                        new_string_content,
-                        new_string_variables,
-                    });
-                } else {
-                    self.visit_expr(func);
-                    for expr in args {
-                        self.visit_expr(expr);
-                    }
-                    for keyword in keywords {
-                        self.visit_keyword(keyword);
-                    }
-                }
-            }
-            ExprKind::JoinedStr { values } => {
-                for value in values {
-                    match &value.node {
-                        ExprKind::Constant { value, kind } => {
-                            println!("constant: {:?} of kind {:?}", value, kind);
-                        }
-                        ExprKind::FormattedValue {
-                            value,
-                            conversion,
-                            format_spec,
-                        } => {
-                            println!(
-                                "fmtval: {:?} conversion {:?} and spec {:?}",
-                                value, conversion, format_spec
-                            );
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-            }
-            _ => (),
-        }
-    }
 }
 
 async fn get_changes(content: &str, filename: &str) -> Vec<Change> {
@@ -199,6 +137,8 @@ mod tests {
             TestCase { input: "foo=1\nlogger.info('{foo}'.format(foo=foo))".to_string(), expected_output: "foo=1\nlogger.info('%s', foo)".to_string() },
             // Multi-line
             TestCase { input: "logger.info(\n\t'{}'.format(\n\t\t1\n\t)\n)".to_string(), expected_output: "logger.info(\n\t'%s', 1\n)".to_string() },
+            // Contained by class
+            TestCase { input: "class Foo:\n\tdef bar(self):\n\t\tlogger.info('{}'.format(1))\n".to_string(), expected_output: "class Foo:\n\tdef bar(self):\n\t\tlogger.info('%s', 1)\n".to_string() },
         ]
     }
 

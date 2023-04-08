@@ -2,6 +2,7 @@
 use log::{debug, info};
 use regex::Regex;
 use rustpython_parser::ast::{Constant, Expr, ExprKind, Keyword, KeywordData};
+use crate::ast::constant_to_string;
 
 #[derive(Debug)]
 struct NamedArg {
@@ -12,27 +13,6 @@ struct NamedArg {
 #[derive(Debug)]
 struct Arg {
     value: String,
-}
-
-fn constant_to_string(constant: Constant) -> String {
-    match constant {
-        Constant::None => "None".to_string(),
-        Constant::Bool(value) => value.to_string(),
-        Constant::Str(value) => value,
-        Constant::Bytes(value) => format!("b\"{}\"", String::from_utf8_lossy(&*value)),
-        Constant::Int(value) => value.to_string(),
-        Constant::Float(value) => value.to_string(),
-        Constant::Ellipsis => "...".to_string(),
-        Constant::Complex { real, imag } => todo!(),
-        Constant::Tuple(value) => {
-            let items = value
-                .iter()
-                .map(|item| constant_to_string(item.clone()))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("({})", items)
-        }
-    }
 }
 
 fn get_named_arg_index_start_end(re: &Regex, string: &str, key: &str) -> (usize, usize) {
@@ -55,13 +35,11 @@ fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {
     matches
 }
 
-// Look for logger.error("string {var}.format(var=var)) syntax
+/// Look for logger.error("string {var}.format(var=var)) syntax
 pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keyword>) -> Option<(String, String)> {
     let mut format_named_args: Vec<NamedArg> = vec![]; // .format(var=var) or .format(var)
     let mut format_args: Vec<Arg> = vec![]; // .format(var=var) or .format(var)
     let mut string = String::new();
-
-    println!("{:?}", args);
 
     if let ExprKind::Attribute { value, attr, ctx } = &func.node {
         if attr != "format" {
@@ -193,7 +171,6 @@ pub fn check_for_format(func: &Box<Expr>, args: &Vec<Expr>, keywords: &Vec<Keywo
         ordered_arguments[index] = Some(arg.value);
     }
 
-    println!("{:?}", ordered_arguments);
     let string_addon = ordered_arguments
         .iter()
         .map(|s| s.clone().unwrap())
