@@ -1,0 +1,21 @@
+[package]
+name = "printf-log-formatter"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sondre Lillebø Gundersen <sondrelg@live.no>"]
+description = "Printf log formatter"
+
+[dependencies]
+anyhow = { version = "1.0.70", default-features = false, features=["std"] }
+clap = { version = "4.2.1", default-features = false, features = ["std", "derive"] }
+futures = { version = "0.3.28", default-features = false, features = ["std"] }
+regex = { version = "1.7.3", default-features = false, features=["std"] }
+tokio = { version = "1.27.0", default-features = false, features = ["fs", "io-util", "macros", "rt-multi-thread"] }
+rustpython-parser = { features = [
+  "lalrpop",
+], git = "https://github.com/RustPython/RustPython.git", rev = "c15f670f2c30cfae6b41a1874893590148c74bc4" }
+
+
+[dev-dependencies]
+assert-panic = "*"
+tokio-test = "*"

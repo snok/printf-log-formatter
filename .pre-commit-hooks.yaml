@@ -1,0 +1,9 @@
+- id: printf-log-formatter
+  name: printf log formatter
+  entry: printf-log-formatter
+  description: |
+    Downgrades f-strings and .format formatted log strings
+    for log levels above a certain threshold.
+  language: rust
+  types: [ file ]
+  stages: [ commit ]

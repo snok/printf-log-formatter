@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+      - id: cargo-check
+      - id: clippy
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-ast
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+      - id: double-quote-string-fixer
+
+  - repo: https://github.com/sirosen/check-jsonschema
+    rev: 0.22.0
+    hooks:
+      - id: check-github-actions
+      - id: check-github-workflows
+
+  - repo: https://github.com/sondrelg/disallow-file-endings
+    rev: v0.1.0
+    hooks:
+      - id: disallow-file-extensions
+        args:
+          - --extensions=.yml
