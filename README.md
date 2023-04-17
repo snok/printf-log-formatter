@@ -35,7 +35,7 @@ Install with pre-commit, using:
 
 ```yaml
 - repo: https://github.com/sondrelg/printf-log-formatter
-  rev: ""
+  rev: v0.1.0
   hooks:
     - id: printf-log-formatter
       args:
