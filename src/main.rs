@@ -98,11 +98,14 @@ async fn fix_file(filename: String) -> Result<bool> {
     let (fixed_content, changed) = fix_content(content, &filename).await?;
 
     // Write updated content back to file
-    let mut file = File::create(&filename).await?;
-    for content in fixed_content {
-        file.write_all(content.replace('\n', "\\n").as_bytes())
-            .await?;
-        file.write_all(b"\n").await?;
+    if changed {
+        let mut file = File::create(&filename).await?;
+        let mut cleaned_content = vec![];
+        for content in fixed_content {
+            cleaned_content.push(content.replace('\n', "\\n"));
+        }
+        file.write_all(cleaned_content.join("\n").as_bytes())
+            .await?
     }
 
     Ok(changed)
