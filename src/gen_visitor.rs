@@ -1,3 +1,4 @@
+#![allow(clippy::pedantic)]
 use rustpython_parser::ast::{
     Alias, Arg, Arguments, Boolop, Cmpop, Comprehension, Constant, Excepthandler,
     ExcepthandlerKind, Expr, ExprContext, ExprKind, Keyword, MatchCase, Operator, Pattern,

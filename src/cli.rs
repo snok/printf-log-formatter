@@ -16,8 +16,7 @@ impl LogLevel {
         match s {
             "debug" => Some(Self::Debug),
             "info" => Some(Self::Info),
-            "war" => Some(Self::Warning),
-            "warning" => Some(Self::Warning),
+            "warn" | "warning" => Some(Self::Warning),
             "error" => Some(Self::Error),
             "exception" => Some(Self::Exception),
             "critical" => Some(Self::Critical),

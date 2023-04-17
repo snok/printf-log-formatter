@@ -1,6 +1,7 @@
 use crate::ast::constant_to_string;
-
 use crate::parse_fstring::parse_formatted_value;
+use anyhow::bail;
+use anyhow::Result;
 use regex::Regex;
 use rustpython_parser::ast::{Constant, Expr, ExprKind, Keyword, KeywordData};
 
@@ -10,21 +11,21 @@ pub struct NamedArg {
     pub(crate) value: Constant,
 }
 
-fn get_named_arg_index_start_end(re: &Regex, string: &str, key: &str) -> (usize, usize) {
+fn get_named_arg_index_start_end(re: &Regex, string: &str, key: &str) -> Result<(usize, usize)> {
     for cap in re.captures_iter(string) {
         let capture = cap.get(0).unwrap();
         if cap.get(1).unwrap().as_str() == key {
-            return (capture.start(), capture.end());
+            return Ok((capture.start(), capture.end()));
         }
     }
-    unreachable!()
+    bail!("Failed to capture named args for string '{string}'. Please submit a ticket to https://github.com/sondrelg/printf-log-formatter/issues")
 }
 
 fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {
     let mut matches = vec![];
     for (i, cap) in re.captures_iter(string).enumerate() {
         if cap.get(1).unwrap().as_str() == key {
-            matches.push(i)
+            matches.push(i);
         }
     }
     matches
@@ -33,7 +34,7 @@ fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {
 pub fn get_args_and_keywords(
     args: &Vec<Expr>,
     keywords: &Vec<Keyword>,
-) -> (Vec<String>, Vec<NamedArg>) {
+) -> Result<(Vec<String>, Vec<NamedArg>)> {
     let mut f_named_args: Vec<NamedArg> = vec![];
     let mut f_args: Vec<String> = vec![];
 
@@ -45,24 +46,23 @@ pub fn get_args_and_keywords(
                     f_named_args.push(NamedArg {
                         key: arg.to_string(),
                         value: value.clone(),
-                    })
+                    });
                 } else {
-                    f_args.push(constant_to_string(value.clone()))
+                    f_args.push(constant_to_string(value.clone()));
                 }
             }
             ExprKind::Name { id, .. } => f_args.push(id.to_string()),
             _ => {
-                println!("{:?}", &value.node);
-                unreachable!("Apparently there are more things to handle for args and keywords")
+                bail!("Failed to handle keyword of type '{:?}'. Please submit a ticket to https://github.com/sondrelg/printf-log-formatter/issues", &value.node);
             }
         }
     }
 
     for arg in args {
-        f_args.push(parse_formatted_value(arg, "".to_owned()));
+        f_args.push(parse_formatted_value(arg, String::new())?);
     }
 
-    (f_args, f_named_args)
+    Ok((f_args, f_named_args))
 }
 
 // Captures any {} in a string
@@ -78,7 +78,7 @@ const FORMATTED_VALUE_GROUP_REGEX: &str = r"\{([^{}:]*)(?::[^{}]*)?\}";
 const FORMATTED_VALUE_GROUP_REGEX_COLON_CHARACTERS: &str = r"\{[^{}]*(:[^{}]*)?\}";
 
 /// Replace all keyword arguments with %s and insert each of their values
-/// into the ordered_arguments vector, in the right order. Something to be
+/// into the `ordered_arguments` vector, in the right order. Something to be
 /// aware of is that this is valid Python syntax:
 ///
 ///   "{x:02f} + {x:03f} - {x} == {y}".format(x=2, y=2)
@@ -90,7 +90,7 @@ fn order_keyword_arguments(
     new_string: &mut String,
     f_named_args: Vec<NamedArg>,
     ordered_arguments: &mut [Option<String>],
-) {
+) -> Result<()> {
     let group_regex = Regex::new(FORMATTED_VALUE_GROUP_REGEX).unwrap();
     for keyword_arg in f_named_args {
         // Get all indexes for the given keyword argument key
@@ -103,7 +103,7 @@ fn order_keyword_arguments(
         // We might push index 1, then 3; not 0,1,2.
         for index in indexes {
             let (start, end) =
-                get_named_arg_index_start_end(&group_regex, new_string, &keyword_arg.key);
+                get_named_arg_index_start_end(&group_regex, new_string, &keyword_arg.key)?;
 
             // Insert value into the right index for printf-style formatting later
             ordered_arguments[index] = Some(str_value.clone());
@@ -112,6 +112,7 @@ fn order_keyword_arguments(
             new_string.replace_range(start..end, "%s");
         }
     }
+    Ok(())
 }
 
 // Args are captured in order, so we should be able to just fill in the missing ordered arguments.
@@ -123,16 +124,13 @@ fn order_arguments(
 ) {
     let any_curly_brace_re = Regex::new(FORMATTED_VALUE_GROUP_REGEX_COLON_CHARACTERS).unwrap();
     for arg in f_args {
-        let mat = match any_curly_brace_re.find(new_string) {
-            Some(t) => t,
-            None => {
-                // This will happen for syntax like
-                //  logger.info("{}".format(1,2))
-                // where there are more arguments passed than mapped to.
-                // We could ignore these cases, but if we silently fixed them
-                // that might cause other problems for the user ¯\_(ツ)_/¯
-                panic!("Found excess argument `{}` in logger. Run with RUST_LOG=debug for verbose logging.", arg)
-            }
+        let Some(mat) = any_curly_brace_re.find(new_string) else {
+            // This will happen for syntax like
+            //  logger.info("{}".format(1,2))
+            // where there are more arguments passed than mapped to.
+            // We could ignore these cases, but if we silently fixed them
+            // that might cause other problems for the user ¯\_(ツ)_/¯
+            panic!("Found excess argument `{arg}` in logger. Run with RUST_LOG=debug for verbose logging.")
         };
         let start = mat.start();
         let end = mat.end();
@@ -142,7 +140,10 @@ fn order_arguments(
 
         // Find the first `None` in the ordered arguments vector and fill it with
         // our argument value. This relies on keyword arguments being populated first.
-        let index = ordered_arguments.iter().position(|x| x.is_none()).unwrap();
+        let index = ordered_arguments
+            .iter()
+            .position(std::option::Option::is_none)
+            .unwrap();
         ordered_arguments[index] = Some(arg);
     }
 }
@@ -153,10 +154,11 @@ fn order(
     f_args: Vec<String>,
     f_named_args: Vec<NamedArg>,
     ordered_arguments: &mut [Option<String>],
-) {
+) -> Result<()> {
     // Keyword arguments need to be handled first, or the ordered_arguments logic breaks
-    order_keyword_arguments(string, new_string, f_named_args, ordered_arguments);
+    order_keyword_arguments(string, new_string, f_named_args, ordered_arguments)?;
     order_arguments(new_string, f_args, ordered_arguments);
+    Ok(())
 }
 
 /// Parse str.format() AST
@@ -167,9 +169,9 @@ pub fn fix_format_call(
     func: &Expr,
     args: &Vec<Expr>,
     keywords: &Vec<Keyword>,
-) -> Option<(String, Vec<String>)> {
+) -> Result<Option<(String, Vec<String>)>> {
     // Get all arguments and named arguments from the str.format(...) call
-    let (f_args, f_named_args) = get_args_and_keywords(args, keywords);
+    let (f_args, f_named_args) = get_args_and_keywords(args, keywords)?;
 
     // Copy the string from the str.format() call
     let mut string = String::new();
@@ -204,12 +206,12 @@ pub fn fix_format_call(
         f_args,
         f_named_args,
         &mut ordered_arguments,
-    );
+    )?;
 
     let string_addon = ordered_arguments
         .iter()
         .map(|s| s.clone().unwrap())
         .collect();
 
-    Some((new_string, string_addon))
+    Ok(Some((new_string, string_addon)))
 }

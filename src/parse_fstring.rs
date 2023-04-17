@@ -1,33 +1,35 @@
 use crate::ast::{constant_to_string, operator_to_string};
 use crate::parse_format::get_args_and_keywords;
+use anyhow::bail;
+use anyhow::Result;
 use rustpython_parser::ast::{Expr, ExprKind};
 
-/// Parse FormattedValue AST
-pub fn parse_formatted_value(value: &Expr, postfix: String) -> String {
-    match &value.node {
+/// Parse `FormattedValue` AST
+pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
+    let string = match &value.node {
         // When we see a Name node we're typically handling a variable.
         // In this case, we want variables to be referenced with %s, and
         // for the variable definition to be placed after our string.
         ExprKind::Name { id, .. } => {
-            if !postfix.is_empty() {
-                format!("{}.{}", id, postfix)
-            } else {
+            if postfix.is_empty() {
                 id.to_string()
+            } else {
+                format!("{id}.{postfix}")
             }
         }
         // An attribute node is typically an intermediate node
         // We pass down the a reference to the `attr` value to be able
         // to reconstruct the entire chain of attributes + names in the end.
         ExprKind::Attribute { value, attr, .. } => {
-            if !postfix.is_empty() {
-                parse_formatted_value(value, format!("{}.{}", attr, postfix))
+            if postfix.is_empty() {
+                parse_formatted_value(value, attr.to_string())?
             } else {
-                parse_formatted_value(value, attr.to_string())
+                parse_formatted_value(value, format!("{attr}.{postfix}"))?
             }
         }
         // A constant is a value like 1 or None.
         // We want these values to be moved out of the string.
-        ExprKind::Constant { value, .. } => constant_to_string(value.to_owned()),
+        ExprKind::Constant { value, .. } => constant_to_string(value.clone()),
         // Calls are function calls. So for example we might see f"{len(foo)}" in an f-string.
         // Here, we want to move the entire contents of the formatted value out of the string.
         // This requires us to reconstruct the string from AST.
@@ -36,8 +38,8 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> String {
             args: call_args,
             keywords,
         } => {
-            let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords);
-            let ExprKind::Name { id, .. } = &func.node else { unreachable!("woops") };
+            let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords)?;
+            let ExprKind::Name { id, .. } = &func.node else { unreachable!("This shouldn't happen") };
 
             // Create a string with `x=y` for all named arguments and prefix it
             // with a comma unless the string ends up being empty.
@@ -63,27 +65,24 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> String {
         ExprKind::BinOp { left, op, right } => {
             format!(
                 "{} {} {}",
-                parse_formatted_value(left, postfix.clone()),
+                parse_formatted_value(left, postfix.clone())?,
                 operator_to_string(op),
-                parse_formatted_value(right, postfix)
+                parse_formatted_value(right, postfix)?
             )
         }
         _ => {
-            println!("{:?}", value.node);
-            unreachable!(
-                "There are apparently more patterns to handle \
-                in the FormattedValue match statement"
-            )
+            bail!("Failed to parse str.format syntax for '{:?}'. Please submit an issue to https://github.com/sondrelg/printf-log-formatter/issues", &value.node)
         }
-    }
+    };
+    Ok(string)
 }
 
 /// Parse f-string AST
-fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) {
+fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> Result<()> {
     match &value.node {
         // When we see a constant, we can just add it back to our new string directly
         ExprKind::Constant { value, .. } => {
-            string.push_str(&constant_to_string(value.to_owned()));
+            string.push_str(&constant_to_string(value.clone()));
         }
         // A FormattedValue is the {} in an f-string.
         // Since a formatted value can contain constants, and we want to recursively
@@ -91,22 +90,20 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) {
         // a dedicated function.
         ExprKind::FormattedValue { value, .. } => {
             string.push_str("%s");
-            args.push(parse_formatted_value(value, "".to_string()));
+            args.push(parse_formatted_value(value, String::new())?);
         }
         _ => {
-            unreachable!(
-                "unreachable code reached: f-strings can apparently contain \
-                more than just constants and formatted values"
-            )
+            bail!("Failed to parse f-string '{:?}'. F-strings can apparently contain more than just constants and formatted values. Please submit an issue to https://github.com/sondrelg/printf-log-formatter/issues", &value.node)
         }
     }
+    Ok(())
 }
 
-pub fn fix_fstring(values: &[Expr]) -> Option<(String, Vec<String>)> {
+pub fn fix_fstring(values: &[Expr]) -> (String, Vec<String>) {
     let mut string = String::new();
     let mut args = vec![];
     values
         .iter()
-        .for_each(|value| parse_fstring(value, &mut string, &mut args));
-    Some((string, args))
+        .for_each(|value| parse_fstring(value, &mut string, &mut args).unwrap_or(()));
+    (string, args)
 }

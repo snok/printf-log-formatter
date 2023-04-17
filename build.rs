@@ -6,7 +6,7 @@ fn main() {
     let local_path = "src/gen_visitor";
 
     // Download file
-    println!("Downloading {} to {}", url, local_path);
+    println!("Downloading {url} to {local_path}");
     Command::new("curl")
         .arg("-fsSL")
         .arg(url)
