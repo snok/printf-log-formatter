@@ -141,7 +141,7 @@ async fn main() -> Result<()> {
     let results = tasks_stream.buffer_unordered(256).collect::<Vec<_>>().await;
 
     // Set exit code; 1 if something was changed else 0
-    let something_changed = results.into_iter().any(|result| result.unwrap());
+    let something_changed = results.into_iter().any(std::result::Result::unwrap);
     exit(i32::from(something_changed));
 }
 
@@ -244,6 +244,8 @@ mod tests {
             TestCase { input: "logger.error(f'{foo}\\n{bar}')".to_string(), expected_output: "logger.error('%s\n%s', foo, bar)".to_string() },
             // Multi-line
             TestCase { input: "logger.error(\n\tf'foo {bar} '\n\tf'baz %s',\n\te,\n\texc_info=True)".to_string(), expected_output: "logger.error(\n\t'foo %s baz %s', bar\n,\n\te,\n\texc_info=True)".to_string() },
+            // Call inside f-string
+            TestCase { input: "logging.error(f'Error parsing event file: {e.errors()}')".to_string(), expected_output: "logging.error('Error parsing event file: %s', e.errors())".to_string() },
         ]
     }
 
@@ -255,7 +257,11 @@ mod tests {
             quotes: Quotes::Single,
         });
         for test_case in fstring_test_cases() {
-            let (content, _changed) = fix_content(&test_case.input, "filename");
+            let (content, _changed) = FILENAME
+                .scope("test".to_string(), async move {
+                    fix_content(&test_case.input, "filename")
+                })
+                .await;
             let output = content.join("\n");
             assert_eq!(output, test_case.expected_output);
         }

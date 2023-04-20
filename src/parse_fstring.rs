@@ -40,33 +40,41 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
             keywords,
         } => {
             let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords)?;
-            let ExprKind::Name { id, .. } = &func.node else {
-                let filename = FILENAME.with(|filename| filename.clone());
-                let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, func.location.row());
-                eprintln!("{}", error_message);
-                bail!("");
-            };
 
-            // Create a string with `x=y` for all named arguments and prefix it
-            // with a comma unless the string ends up being empty.
-            let mut comma_delimited_named_arguments = f_named_args
-                .into_iter()
-                .map(|arg| format!("{}={}", arg.key, constant_to_string(arg.value)))
-                .collect::<Vec<String>>()
-                .join(", ");
-            if !comma_delimited_named_arguments.is_empty() {
-                comma_delimited_named_arguments =
-                    ", ".to_string() + &comma_delimited_named_arguments;
+            match &func.node {
+                ExprKind::Name { id, .. } => {
+                    // Create a string with `x=y` for all named arguments and prefix it
+                    // with a comma unless the string ends up being empty.
+                    let mut comma_delimited_named_arguments = f_named_args
+                        .into_iter()
+                        .map(|arg| format!("{}={}", arg.key, constant_to_string(arg.value)))
+                        .collect::<Vec<String>>()
+                        .join(", ");
+                    if !comma_delimited_named_arguments.is_empty() {
+                        comma_delimited_named_arguments =
+                            ", ".to_string() + &comma_delimited_named_arguments;
+                    }
+
+                    // Finally, push the reconstructed function call to the outside of the string
+                    // and just add a %s in the string.
+                    format!(
+                        "{}({}{})",
+                        id,
+                        f_args.join(", "),
+                        comma_delimited_named_arguments
+                    )
+                }
+                ExprKind::Attribute { .. } => {
+                    format!("{}()", parse_formatted_value(func, postfix)?)
+                }
+                _ => {
+                    println!("{:?}", &func.node);
+                    let filename = FILENAME.with(std::clone::Clone::clone);
+                    let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, func.location.row());
+                    eprintln!("{error_message}");
+                    bail!("")
+                }
             }
-
-            // Finally, push the reconstructed function call to the outside of the string
-            // and just add a %s in the string.
-            format!(
-                "{}({}{})",
-                id,
-                f_args.join(", "),
-                comma_delimited_named_arguments
-            )
         }
         ExprKind::BinOp { left, op, right } => {
             format!(
@@ -77,9 +85,9 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
             )
         }
         _ => {
-            let filename = FILENAME.with(|filename| filename.clone());
+            let filename = FILENAME.with(std::clone::Clone::clone);
             let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
-            eprintln!("{}", error_message);
+            eprintln!("{error_message}");
             bail!("");
         }
     };
@@ -102,9 +110,9 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> R
             args.push(parse_formatted_value(value, String::new())?);
         }
         _ => {
-            let filename = FILENAME.with(|filename| filename.clone());
+            let filename = FILENAME.with(std::clone::Clone::clone);
             let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
-            eprintln!("{}", error_message);
+            eprintln!("{error_message}");
             bail!("");
         }
     }
