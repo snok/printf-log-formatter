@@ -13,16 +13,18 @@ impl LoggerVisitor {
     // f-string
     fn handle_joinedstr(&mut self, args: &Vec<Expr>, values: &[Expr]) {
         for expr in args {
-            let (new_string_content, new_string_variables) = fix_fstring(values);
-            if !new_string_content.is_empty() {
-                self.changes.push(Change {
-                    lineno: expr.location.row(),
-                    col_offset: expr.location.column(),
-                    end_lineno: expr.end_location.unwrap().row(),
-                    end_col_offset: expr.end_location.unwrap().column(),
-                    new_string_content,
-                    new_string_variables,
-                });
+            if let ExprKind::JoinedStr { .. } = &expr.node {
+                let (new_string_content, new_string_variables) = fix_fstring(values);
+                if !new_string_content.is_empty() {
+                    self.changes.push(Change {
+                        lineno: expr.location.row(),
+                        col_offset: expr.location.column(),
+                        end_lineno: expr.end_location.unwrap().row(),
+                        end_col_offset: expr.end_location.unwrap().column(),
+                        new_string_content,
+                        new_string_variables,
+                    });
+                }
             }
         }
     }
@@ -49,7 +51,7 @@ impl LoggerVisitor {
         }
     }
 
-    // Might be a logger.error call
+    // Might be a logger.error call, might not be - let's see
     fn handle_call(&mut self, func: &Expr, args: &Vec<Expr>) {
         if let ExprKind::Attribute { attr: top_attr, .. } = &func.node {
             // First, check that the log level is valid
@@ -120,6 +122,7 @@ impl<'a> Visitor<'a> for LoggerVisitor {
     }
 }
 
+// TODO: Use display impl if possible
 pub fn constant_to_string(constant: Constant) -> String {
     match constant {
         Constant::None => "None".to_string(),

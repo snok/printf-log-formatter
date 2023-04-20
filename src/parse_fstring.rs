@@ -102,8 +102,10 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> R
 pub fn fix_fstring(values: &[Expr]) -> (String, Vec<String>) {
     let mut string = String::new();
     let mut args = vec![];
+
     values
         .iter()
         .for_each(|value| parse_fstring(value, &mut string, &mut args).unwrap_or(()));
+
     (string, args)
 }

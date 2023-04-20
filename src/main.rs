@@ -35,7 +35,7 @@ struct Change {
     new_string_variables: Vec<String>,
 }
 
-// Parse the program and find all the changes that need to be made
+/// Parse the program and find all the changes that need to be made
 fn get_changes(content: &str, filename: &str) -> Vec<Change> {
     let mut visitor = LoggerVisitor { changes: vec![] };
 
@@ -51,7 +51,7 @@ fn get_changes(content: &str, filename: &str) -> Vec<Change> {
     visitor.changes
 }
 
-// Rewrite file contents
+/// Rewrite a file based on changes found
 fn fix_content(content: &str, filename: &str) -> (Vec<String>, bool) {
     let changes = get_changes(content, filename);
 
@@ -59,6 +59,7 @@ fn fix_content(content: &str, filename: &str) -> (Vec<String>, bool) {
     let mut popped_rows = 0;
 
     let quotes = SETTINGS.get().unwrap().quotes.clone();
+
     for change in &changes {
         let new_logger = format!(
             "{}{}{}, {}",
@@ -75,9 +76,11 @@ fn fix_content(content: &str, filename: &str) -> (Vec<String>, bool) {
             // Replace things on the first line
             vec_content[change.lineno - 1 - popped_rows]
                 .replace_range(&change.col_offset.., &new_logger);
+
             // Replace things on the last line
             vec_content[change.end_lineno - 1 - popped_rows]
                 .replace_range(..change.end_col_offset, "");
+
             // Delete any in-between rows since these will now be empty,
             // after inlining syntax on the first line
             vec_content.drain(change.lineno..change.end_lineno - 1);
@@ -125,9 +128,11 @@ async fn main() -> Result<()> {
     let tasks_stream =
         stream::iter(filenames).map(|filename| tokio::task::spawn(fix_file(filename)));
 
+    // Only process a certain number of files at the same time,
+    // so we don't run into a too-many-open-files error
     let results = tasks_stream.buffer_unordered(256).collect::<Vec<_>>().await;
 
-    // Set exit code
+    // Set exit code; 1 if something was changed else 0
     let something_changed = results.into_iter().any(|result| result.unwrap().unwrap());
     exit(i32::from(something_changed));
 }
@@ -228,6 +233,8 @@ mod tests {
             TestCase { input: "logger.error(f'{foo + 1}')".to_string(), expected_output: "logger.error('%s', foo + 1)".to_string() },
             // Newline character
             TestCase { input: "logger.error(f'{foo}\\n{bar}')".to_string(), expected_output: "logger.error('%s\n%s', foo, bar)".to_string() },
+            // Multi-line
+            TestCase { input: "logger.error(\n\tf'foo {bar} '\n\tf'baz %s',\n\te,\n\texc_info=True)".to_string(), expected_output: "logger.error(\n\t'foo %s baz %s', bar\n,\n\te,\n\texc_info=True)".to_string() },
         ]
     }
 
