@@ -1,6 +1,6 @@
 use crate::ast::{constant_to_string, operator_to_string};
 use crate::parse_format::get_args_and_keywords;
-use crate::FILENAME;
+use crate::{FILENAME, SETTINGS};
 use anyhow::bail;
 use anyhow::Result;
 use rustpython_parser::ast::{Expr, ExprKind};
@@ -68,7 +68,6 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
                     format!("{}()", parse_formatted_value(func, postfix)?)
                 }
                 _ => {
-                    println!("{:?}", &func.node);
                     let filename = FILENAME.with(std::clone::Clone::clone);
                     let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, func.location.row());
                     eprintln!("{error_message}");
@@ -82,6 +81,16 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
                 parse_formatted_value(left, postfix.clone())?,
                 operator_to_string(op),
                 parse_formatted_value(right, postfix)?
+            )
+        }
+        ExprKind::Subscript { value, slice, .. } => {
+            let quotes = SETTINGS.get().unwrap().quotes.clone();
+            format!(
+                "{}[{}{}{}]",
+                parse_formatted_value(value, postfix.clone())?,
+                quotes.char(),
+                parse_formatted_value(slice, postfix)?,
+                quotes.char()
             )
         }
         _ => {

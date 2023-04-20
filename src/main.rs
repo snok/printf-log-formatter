@@ -189,6 +189,10 @@ mod tests {
             TestCase { input: "logger.error('{}'.format(foo + 1))".to_string(), expected_output: "logger.error('%s', foo + 1)".to_string() },
             // Newline character
             TestCase { input: "logger.error('{}\\n{}'.format(foo, bar))".to_string(), expected_output: "logger.error('%s\n%s', foo, bar)".to_string() },
+            // Call
+            TestCase { input: "logging.error('Error parsing event file: {}'.format(e.errors()))".to_string(), expected_output: "logging.error('Error parsing event file: %s', e.errors())".to_string() },
+            // Index
+            TestCase { input: "logger.error('{}'.format(ret[\"id\"]))".to_string(), expected_output: "logger.error('%s', ret['id'])".to_string() },
 
         ]
     }
@@ -246,6 +250,8 @@ mod tests {
             TestCase { input: "logger.error(\n\tf'foo {bar} '\n\tf'baz %s',\n\te,\n\texc_info=True)".to_string(), expected_output: "logger.error(\n\t'foo %s baz %s', bar\n,\n\te,\n\texc_info=True)".to_string() },
             // Call inside f-string
             TestCase { input: "logging.error(f'Error parsing event file: {e.errors()}')".to_string(), expected_output: "logging.error('Error parsing event file: %s', e.errors())".to_string() },
+            // Index inside f-string
+            TestCase { input: "logger.error(f'{ret[\"id\"]}')".to_string(), expected_output: "logger.error('%s', ret['id'])".to_string() },
         ]
     }
 
