@@ -1,9 +1,10 @@
+use std::process::exit;
+
 use anyhow::Result;
 use clap::Parser;
 use clap::__derive_refs::once_cell::sync::OnceCell;
 use futures::{stream, StreamExt};
 use rustpython_parser::parse_program;
-use std::process::exit;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -14,7 +15,6 @@ use crate::gen_visitor::walk_stmt;
 
 mod ast;
 mod cli;
-
 mod gen_visitor;
 mod parse_format;
 mod parse_fstring;
@@ -24,6 +24,10 @@ mod parse_fstring;
 // Without this we would need to completely rewrite the
 // visitor trait to pass down settings values.
 static SETTINGS: OnceCell<Opts> = OnceCell::new();
+
+tokio::task_local! {
+    static FILENAME: String;
+}
 
 #[derive(Debug)]
 struct Change {
@@ -125,22 +129,27 @@ async fn main() -> Result<()> {
             .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
     });
 
-    let tasks_stream =
-        stream::iter(filenames).map(|filename| tokio::task::spawn(fix_file(filename)));
+    // Create a task per file
+    let tasks_stream = stream::iter(filenames).map(|filename| {
+        async move {
+            // Scope the filename within the task?
+            FILENAME.scope(filename.clone(), fix_file(filename)).await
+        }
+    });
 
-    // Only process a certain number of files at the same time,
-    // so we don't run into a too-many-open-files error
+    // Run tasks concurrently
     let results = tasks_stream.buffer_unordered(256).collect::<Vec<_>>().await;
 
     // Set exit code; 1 if something was changed else 0
-    let something_changed = results.into_iter().any(|result| result.unwrap().unwrap());
+    let something_changed = results.into_iter().any(|result| result.unwrap());
     exit(i32::from(something_changed));
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::{LogLevel, Quotes};
     use assert_panic::assert_panic;
+
+    use crate::cli::{LogLevel, Quotes};
 
     use super::*;
 

@@ -1,5 +1,6 @@
 use crate::ast::constant_to_string;
 use crate::parse_fstring::parse_formatted_value;
+use crate::FILENAME;
 use anyhow::bail;
 use anyhow::Result;
 use regex::Regex;
@@ -53,7 +54,10 @@ pub fn get_args_and_keywords(
             }
             ExprKind::Name { id, .. } => f_args.push(id.to_string()),
             _ => {
-                bail!("Failed to handle keyword of type '{:?}'. Please submit a ticket to https://github.com/sondrelg/printf-log-formatter/issues", &value.node);
+                let filename = FILENAME.with(|filename| filename.clone());
+                let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
+                eprintln!("{}", error_message);
+                bail!("");
             }
         }
     }

@@ -14,16 +14,17 @@ impl LoggerVisitor {
     fn handle_joinedstr(&mut self, args: &Vec<Expr>, values: &[Expr]) {
         for expr in args {
             if let ExprKind::JoinedStr { .. } = &expr.node {
-                let (new_string_content, new_string_variables) = fix_fstring(values);
-                if !new_string_content.is_empty() {
-                    self.changes.push(Change {
-                        lineno: expr.location.row(),
-                        col_offset: expr.location.column(),
-                        end_lineno: expr.end_location.unwrap().row(),
-                        end_col_offset: expr.end_location.unwrap().column(),
-                        new_string_content,
-                        new_string_variables,
-                    });
+                if let Some((new_string_content, new_string_variables)) = fix_fstring(values) {
+                    if !new_string_content.is_empty() {
+                        self.changes.push(Change {
+                            lineno: expr.location.row(),
+                            col_offset: expr.location.column(),
+                            end_lineno: expr.end_location.unwrap().row(),
+                            end_col_offset: expr.end_location.unwrap().column(),
+                            new_string_content,
+                            new_string_variables,
+                        });
+                    }
                 }
             }
         }

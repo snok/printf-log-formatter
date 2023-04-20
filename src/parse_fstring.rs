@@ -1,10 +1,11 @@
 use crate::ast::{constant_to_string, operator_to_string};
 use crate::parse_format::get_args_and_keywords;
+use crate::FILENAME;
 use anyhow::bail;
 use anyhow::Result;
 use rustpython_parser::ast::{Expr, ExprKind};
 
-/// Parse `FormattedValue` AST
+/// Parse `FormattedValue` AST ({something})
 pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
     let string = match &value.node {
         // When we see a Name node we're typically handling a variable.
@@ -39,7 +40,12 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
             keywords,
         } => {
             let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords)?;
-            let ExprKind::Name { id, .. } = &func.node else { unreachable!("This shouldn't happen") };
+            let ExprKind::Name { id, .. } = &func.node else {
+                let filename = FILENAME.with(|filename| filename.clone());
+                let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, func.location.row());
+                eprintln!("{}", error_message);
+                bail!("");
+            };
 
             // Create a string with `x=y` for all named arguments and prefix it
             // with a comma unless the string ends up being empty.
@@ -71,7 +77,10 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
             )
         }
         _ => {
-            bail!("Failed to parse str.format syntax for '{:?}'. Please submit an issue to https://github.com/sondrelg/printf-log-formatter/issues", &value.node)
+            let filename = FILENAME.with(|filename| filename.clone());
+            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
+            eprintln!("{}", error_message);
+            bail!("");
         }
     };
     Ok(string)
@@ -93,19 +102,25 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> R
             args.push(parse_formatted_value(value, String::new())?);
         }
         _ => {
-            bail!("Failed to parse f-string '{:?}'. F-strings can apparently contain more than just constants and formatted values. Please submit an issue to https://github.com/sondrelg/printf-log-formatter/issues", &value.node)
+            let filename = FILENAME.with(|filename| filename.clone());
+            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
+            eprintln!("{}", error_message);
+            bail!("");
         }
     }
     Ok(())
 }
 
-pub fn fix_fstring(values: &[Expr]) -> (String, Vec<String>) {
+pub fn fix_fstring(values: &[Expr]) -> Option<(String, Vec<String>)> {
     let mut string = String::new();
     let mut args = vec![];
 
-    values
-        .iter()
-        .for_each(|value| parse_fstring(value, &mut string, &mut args).unwrap_or(()));
+    for value in values {
+        match parse_fstring(value, &mut string, &mut args) {
+            Ok(_) => (),
+            Err(_) => return None,
+        }
+    }
 
-    (string, args)
+    Some((string, args))
 }
