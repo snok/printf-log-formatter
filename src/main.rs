@@ -73,21 +73,16 @@ fn fix_content(content: &str, filename: &str) -> (Vec<String>, bool) {
             change.new_string_variables.join(", ")
         );
 
+        // If the logger starts and end on the same line, then we can just replace the old line with the new one
         if change.lineno == change.end_lineno {
             vec_content[change.lineno - 1 - popped_rows]
                 .replace_range(&change.col_offset..&change.end_col_offset, &new_logger);
         } else {
-            // Replace things on the first line
+            let range = change.lineno - popped_rows..change.end_lineno - popped_rows;
+
             vec_content[change.lineno - 1 - popped_rows]
                 .replace_range(&change.col_offset.., &new_logger);
-
-            // Replace things on the last line
-            vec_content[change.end_lineno - 1 - popped_rows]
-                .replace_range(..change.end_col_offset, "");
-
-            // Delete any in-between rows since these will now be empty,
-            // after inlining syntax on the first line
-            vec_content.drain(change.lineno..change.end_lineno - 1);
+            vec_content.drain(range);
             popped_rows += change.end_lineno - change.lineno;
         }
     }
@@ -178,7 +173,7 @@ mod tests {
             TestCase { input: "foo=1\nlogger.error('{}'.format(foo))".to_string(), expected_output: "foo=1\nlogger.error('%s', foo)".to_string() },
             TestCase { input: "foo=1\nlogger.error('{foo}'.format(foo=foo))".to_string(), expected_output: "foo=1\nlogger.error('%s', foo)".to_string() },
             // Multi-line
-            TestCase { input: "logger.error(\n\t'{}'.format(\n\t\t1\n\t)\n)".to_string(), expected_output: "logger.error(\n\t'%s', 1\n\n)".to_string() },
+            TestCase { input: "logger.error(\n\t'{}'.format(\n\t\t1\n\t)\n)".to_string(), expected_output: "logger.error(\n\t'%s', 1\n)".to_string() },
             // Contained by class
             TestCase { input: "class Foo:\n\tdef bar(self):\n\t\tlogger.error('{}'.format(1))\n".to_string(), expected_output: "class Foo:\n\tdef bar(self):\n\t\tlogger.error('%s', 1)\n".to_string() },
             // Nested properties
@@ -193,7 +188,6 @@ mod tests {
             TestCase { input: "logging.error('Error parsing event file: {}'.format(e.errors()))".to_string(), expected_output: "logging.error('Error parsing event file: %s', e.errors())".to_string() },
             // Index
             TestCase { input: "logger.error('{}'.format(ret[\"id\"]))".to_string(), expected_output: "logger.error('%s', ret['id'])".to_string() },
-
         ]
     }
 
@@ -213,12 +207,21 @@ mod tests {
 
     #[test]
     fn test_fix_content_format_with_too_many_arguments_panics() {
+        SETTINGS.get_or_init(|| Opts {
+            log_level: LogLevel::Error,
+            filenames: vec![],
+            quotes: Quotes::Single,
+        });
         assert_panic!(
             tokio_test::block_on(async {
-                fix_content("logger.error('{}'.format(1,2))", "filename");
+                FILENAME
+                .scope("test".to_string(), async move {
+                    fix_content("logger.error('{}'.format(1,2))", "filename");
+                })
+                .await;
             }),
             String,
-            "Found excess argument `2` in logger. Run with RUST_LOG=debug for verbose logging.",
+            "File `test` contains a str.format call with too many arguments for the string. Argument is `2`. Please fix before proceeding.",
         );
     }
 
@@ -247,7 +250,7 @@ mod tests {
             // Newline character
             TestCase { input: "logger.error(f'{foo}\\n{bar}')".to_string(), expected_output: "logger.error('%s\n%s', foo, bar)".to_string() },
             // Multi-line
-            TestCase { input: "logger.error(\n\tf'foo {bar} '\n\tf'baz %s',\n\te,\n\texc_info=True)".to_string(), expected_output: "logger.error(\n\t'foo %s baz %s', bar\n,\n\te,\n\texc_info=True)".to_string() },
+            TestCase { input: "logger.error(\n\tf'foo {bar} '\n\tf'baz %s',\n\te,\n\texc_info=True\n)".to_string(), expected_output: "logger.error(\n\t'foo %s baz %s', bar\n\te,\n\texc_info=True\n)".to_string() },
             // Call inside f-string
             TestCase { input: "logging.error(f'Error parsing event file: {e.errors()}')".to_string(), expected_output: "logging.error('Error parsing event file: %s', e.errors())".to_string() },
             // Index inside f-string
@@ -281,7 +284,7 @@ mod tests {
             // Leading argument is not string -- expect no change
             TestCase { input: "messages.error(self.request, '{}'.format(foo))".to_string(), expected_output: "messages.error(self.request, '{}'.format(foo))".to_string() },
             // Line trim
-            TestCase { input: "logger.error(\n\tf'{1}'\n\tf'{2}',\n\texc_info=True\n)".to_string(), expected_output: "logger.error(\n\t'%s%s', 1, 2\n,\n\texc_info=True\n)".to_string() },
+            TestCase { input: "logger.error(\n\tf'{1}'\n\tf'{2}',\n\texc_info=True\n)".to_string(), expected_output: "logger.error(\n\t'%s%s', 1, 2\n\texc_info=True\n)".to_string() },
             TestCase { input: "logger.exception(f'foo {bar}')".to_string(), expected_output: "logger.exception('foo %s', bar)".to_string() },
         ]
     }

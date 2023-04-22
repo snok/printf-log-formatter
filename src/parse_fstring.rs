@@ -69,7 +69,7 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
                 }
                 _ => {
                     let filename = FILENAME.with(std::clone::Clone::clone);
-                    let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, func.location.row());
+                    let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, func.location.row());
                     eprintln!("{error_message}");
                     bail!("")
                 }
@@ -95,7 +95,7 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
         }
         _ => {
             let filename = FILENAME.with(std::clone::Clone::clone);
-            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
+            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
             eprintln!("{error_message}");
             bail!("");
         }
@@ -120,7 +120,7 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> R
         }
         _ => {
             let filename = FILENAME.with(std::clone::Clone::clone);
-            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
+            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
             eprintln!("{error_message}");
             bail!("");
         }
