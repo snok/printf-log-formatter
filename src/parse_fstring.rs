@@ -93,6 +93,18 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
                 quotes.char()
             )
         }
+        ExprKind::ListComp { elt, generators } => {
+            let mut s = format!("[{}", parse_formatted_value(elt, postfix.clone())?,);
+            for generator in generators {
+                s.push_str(&format!(
+                    " for {} in {}",
+                    parse_formatted_value(&generator.target, postfix.clone())?,
+                    parse_formatted_value(&generator.iter, postfix.clone())?
+                ))
+            }
+            s.push(']');
+            s
+        }
         _ => {
             let filename = FILENAME.with(std::clone::Clone::clone);
             let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());

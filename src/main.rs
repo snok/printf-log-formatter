@@ -255,6 +255,8 @@ mod tests {
             TestCase { input: "logging.error(f'Error parsing event file: {e.errors()}')".to_string(), expected_output: "logging.error('Error parsing event file: %s', e.errors())".to_string() },
             // Index inside f-string
             TestCase { input: "logger.error(f'{ret[\"id\"]}')".to_string(), expected_output: "logger.error('%s', ret['id'])".to_string() },
+            // List comprehension
+            TestCase { input: "logger.error(f'{[str(e) for errors in all_errors for e in errors]}')".to_string(), expected_output: "logger.error('%s', [str(e) for errors in all_errors for e in errors])".to_string() },
         ]
     }
 
