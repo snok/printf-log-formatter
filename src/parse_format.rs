@@ -55,7 +55,7 @@ pub fn get_args_and_keywords(
             ExprKind::Name { id, .. } => f_args.push(id.to_string()),
             _ => {
                 let filename = FILENAME.with(std::clone::Clone::clone);
-                let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new :)", filename, value.location.row());
+                let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
                 eprintln!("{error_message}");
                 bail!("");
             }
@@ -134,7 +134,8 @@ fn order_arguments(
             // where there are more arguments passed than mapped to.
             // We could ignore these cases, but if we silently fixed them
             // that might cause other problems for the user ¯\_(ツ)_/¯
-            panic!("Found excess argument `{arg}` in logger. Run with RUST_LOG=debug for verbose logging.")
+            let filename = FILENAME.with(std::clone::Clone::clone);
+            panic!("File `{filename}` contains a str.format call with too many arguments for the string. Argument is `{arg}`. Please fix before proceeding.")
         };
         let start = mat.start();
         let end = mat.end();
