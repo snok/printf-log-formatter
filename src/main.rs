@@ -257,6 +257,8 @@ mod tests {
             TestCase { input: "logger.error(f'{ret[\"id\"]}')".to_string(), expected_output: "logger.error('%s', ret['id'])".to_string() },
             // List comprehension
             TestCase { input: "logger.error(f'{[str(e) for errors in all_errors for e in errors]}')".to_string(), expected_output: "logger.error('%s', [str(e) for errors in all_errors for e in errors])".to_string() },
+            // Dict comprehension
+            TestCase { input: "logger.error(f'{ {\"foo\": str(e) for errors in all_errors for e in errors} }')".to_string(), expected_output: "logger.error('%s', {'foo': str(e) for errors in all_errors for e in errors})".to_string() },
         ]
     }
 

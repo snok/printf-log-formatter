@@ -63,7 +63,7 @@ pub fn get_args_and_keywords(
     }
 
     for arg in args {
-        f_args.push(parse_formatted_value(arg, String::new())?);
+        f_args.push(parse_formatted_value(arg, String::new(), false)?);
     }
 
     Ok((f_args, f_named_args))

@@ -6,7 +6,7 @@ use anyhow::Result;
 use rustpython_parser::ast::{Expr, ExprKind};
 
 /// Parse `FormattedValue` AST ({something})
-pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
+pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Result<String> {
     let string = match &value.node {
         // When we see a Name node we're typically handling a variable.
         // In this case, we want variables to be referenced with %s, and
@@ -23,14 +23,21 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
         // to reconstruct the entire chain of attributes + names in the end.
         ExprKind::Attribute { value, attr, .. } => {
             if postfix.is_empty() {
-                parse_formatted_value(value, attr.to_string())?
+                parse_formatted_value(value, attr.to_string(), false)?
             } else {
-                parse_formatted_value(value, format!("{attr}.{postfix}"))?
+                parse_formatted_value(value, format!("{attr}.{postfix}"), false)?
             }
         }
         // A constant is a value like 1 or None.
         // We want these values to be moved out of the string.
-        ExprKind::Constant { value, .. } => constant_to_string(value.clone()),
+        ExprKind::Constant { value, .. } => {
+            if in_call {
+                let quotes = SETTINGS.get().unwrap().quotes.clone();
+                format!("{}{}{}", quotes.char(), constant_to_string(value.clone()), quotes.char())
+            } else {
+                constant_to_string(value.clone())
+            }
+        },
         // Calls are function calls. So for example we might see f"{len(foo)}" in an f-string.
         // Here, we want to move the entire contents of the formatted value out of the string.
         // This requires us to reconstruct the string from AST.
@@ -65,7 +72,7 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
                     )
                 }
                 ExprKind::Attribute { .. } => {
-                    format!("{}()", parse_formatted_value(func, postfix)?)
+                    format!("{}()", parse_formatted_value(func, postfix, false)?)
                 }
                 _ => {
                     let filename = FILENAME.with(std::clone::Clone::clone);
@@ -78,31 +85,47 @@ pub fn parse_formatted_value(value: &Expr, postfix: String) -> Result<String> {
         ExprKind::BinOp { left, op, right } => {
             format!(
                 "{} {} {}",
-                parse_formatted_value(left, postfix.clone())?,
+                parse_formatted_value(left, postfix.clone(), false)?,
                 operator_to_string(op),
-                parse_formatted_value(right, postfix)?
+                parse_formatted_value(right, postfix, false)?
             )
         }
         ExprKind::Subscript { value, slice, .. } => {
             let quotes = SETTINGS.get().unwrap().quotes.clone();
             format!(
                 "{}[{}{}{}]",
-                parse_formatted_value(value, postfix.clone())?,
+                parse_formatted_value(value, postfix.clone(), false)?,
                 quotes.char(),
-                parse_formatted_value(slice, postfix)?,
+                parse_formatted_value(slice, postfix, false)?,
                 quotes.char()
             )
         }
         ExprKind::ListComp { elt, generators } => {
-            let mut s = format!("[{}", parse_formatted_value(elt, postfix.clone())?,);
+            let mut s = format!("[{}", parse_formatted_value(elt, postfix.clone(), true)?,);
             for generator in generators {
                 s.push_str(&format!(
                     " for {} in {}",
-                    parse_formatted_value(&generator.target, postfix.clone())?,
-                    parse_formatted_value(&generator.iter, postfix.clone())?
+                    parse_formatted_value(&generator.target, postfix.clone(), true)?,
+                    parse_formatted_value(&generator.iter, postfix.clone(), true)?
                 ))
             }
             s.push(']');
+            s
+        }
+        ExprKind::DictComp { key, value, generators } => {
+            let mut s = format!(
+                "{{{}: {}",
+                parse_formatted_value(key, postfix.clone(), true)?,
+                parse_formatted_value(value, postfix.clone(), true)?,
+            );
+            for generator in generators {
+                s.push_str(&format!(
+                    " for {} in {}",
+                    parse_formatted_value(&generator.target, postfix.clone() , true)?,
+                    parse_formatted_value(&generator.iter, postfix.clone() , true)?
+                ))
+            }
+            s.push('}');
             s
         }
         _ => {
@@ -128,7 +151,7 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> R
         // a dedicated function.
         ExprKind::FormattedValue { value, .. } => {
             string.push_str("%s");
-            args.push(parse_formatted_value(value, String::new())?);
+            args.push(parse_formatted_value(value, String::new(), false)?);
         }
         _ => {
             let filename = FILENAME.with(std::clone::Clone::clone);
