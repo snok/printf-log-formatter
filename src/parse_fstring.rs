@@ -126,7 +126,7 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
                 quotes.char()
             )
         }
-        ExprKind::ListComp { elt, generators } => {
+        ExprKind::ListComp { elt, generators } | ExprKind::GeneratorExp { elt, generators } => {
             let mut s = format!("[{}", parse_formatted_value(elt, postfix.clone(), true)?,);
             for generator in generators {
                 s.push_str(&format!(
