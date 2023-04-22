@@ -33,11 +33,16 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
         ExprKind::Constant { value, .. } => {
             if in_call {
                 let quotes = SETTINGS.get().unwrap().quotes.clone();
-                format!("{}{}{}", quotes.char(), constant_to_string(value.clone()), quotes.char())
+                format!(
+                    "{}{}{}",
+                    quotes.char(),
+                    constant_to_string(value.clone()),
+                    quotes.char()
+                )
             } else {
                 constant_to_string(value.clone())
             }
-        },
+        }
         // Calls are function calls. So for example we might see f"{len(foo)}" in an f-string.
         // Here, we want to move the entire contents of the formatted value out of the string.
         // This requires us to reconstruct the string from AST.
@@ -47,7 +52,6 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
             keywords,
         } => {
             let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords)?;
-
             match &func.node {
                 ExprKind::Name { id, .. } => {
                     // Create a string with `x=y` for all named arguments and prefix it
@@ -71,8 +75,30 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
                         comma_delimited_named_arguments
                     )
                 }
-                ExprKind::Attribute { .. } => {
-                    format!("{}()", parse_formatted_value(func, postfix, false)?)
+                ExprKind::Attribute { value, attr, .. } => {
+                    let call = {
+                        let mut s = "(".to_string();
+                        for arg in f_args {
+                            // TODO: DO the whole first arg, not first arg-dance
+                            s.push_str(&format!("{},", arg))
+                        }
+                        for kwarg in f_named_args {
+                            s.push_str(&format!(
+                                "{}={},",
+                                kwarg.key,
+                                constant_to_string(kwarg.value)
+                            ))
+                        }
+                        s.push(')');
+                        s
+                    };
+
+                    format!(
+                        "{}.{}{}",
+                        parse_formatted_value(value, postfix, true)?,
+                        attr,
+                        call
+                    )
                 }
                 _ => {
                     let filename = FILENAME.with(std::clone::Clone::clone);
@@ -112,7 +138,11 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
             s.push(']');
             s
         }
-        ExprKind::DictComp { key, value, generators } => {
+        ExprKind::DictComp {
+            key,
+            value,
+            generators,
+        } => {
             let mut s = format!(
                 "{{{}: {}",
                 parse_formatted_value(key, postfix.clone(), true)?,
@@ -121,8 +151,8 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
             for generator in generators {
                 s.push_str(&format!(
                     " for {} in {}",
-                    parse_formatted_value(&generator.target, postfix.clone() , true)?,
-                    parse_formatted_value(&generator.iter, postfix.clone() , true)?
+                    parse_formatted_value(&generator.target, postfix.clone(), true)?,
+                    parse_formatted_value(&generator.iter, postfix.clone(), true)?
                 ))
             }
             s.push('}');
