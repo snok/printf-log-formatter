@@ -9,7 +9,7 @@ pub(crate) struct LoggerVisitor {
     pub(crate) changes: Vec<Change>,
 }
 
-const BLACKLISTED_NAMES: [&str;1] = ["warnings"];
+const BLACKLISTED_NAMES: [&str; 1] = ["warnings"];
 
 impl LoggerVisitor {
     // f-string
@@ -56,16 +56,20 @@ impl LoggerVisitor {
 
     // Might be a logger.error call, might not be - let's see
     fn handle_call(&mut self, func: &Expr, args: &Vec<Expr>) {
-        if let ExprKind::Attribute { value, attr: top_attr, .. } = &func.node {
+        if let ExprKind::Attribute {
+            value,
+            attr: top_attr,
+            ..
+        } = &func.node
+        {
             // First, check that the log level is valid
             if let Some(log_level) = LogLevel::maybe_from_str(top_attr) {
                 // Next, check that the log level is above the set threshold
                 if SETTINGS.get().unwrap().log_level <= log_level {
-
                     // Make sure we're not handling an expression like `warnings.warn()`
                     if let ExprKind::Name { id, .. } = &value.node {
                         if BLACKLISTED_NAMES.contains(&&**id) {
-                            return
+                            return;
                         }
                     }
 

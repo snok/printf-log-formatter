@@ -158,6 +158,9 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
             s.push('}');
             s
         }
+        ExprKind::JoinedStr { .. } => {
+            bail!("Won't handle f-strings inside f-strings")
+        }
         _ => {
             let filename = FILENAME.with(std::clone::Clone::clone);
             let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
