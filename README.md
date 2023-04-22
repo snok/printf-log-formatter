@@ -1,12 +1,10 @@
-<img src="https://raw.githubusercontent.com/sondrelg/printf-log-formatter/main/logo.svg?token=GHSAT0AAAAAACAOR4AAQVLI3YMI4IZKDAYCZBS5KOA&sanitize=true" alt="logo" width="110" align="right">
+<a href="https://github.com/sondrelg/printf-log-formatter"><img src="https://raw.githubusercontent.com/sondrelg/printf-log-formatter/main/logo.svg?token=GHSAT0AAAAAACAOR4AAQVLI3YMI4IZKDAYCZBS5KOA&sanitize=true" alt="logo" width="110" align="right"></a>
 
 # printf-log-formatter
 
-Automatically convert f-strings and `str.format()` syntax to printf style strings.
+Automatically convert f-strings and `str.format()` syntax to printf-style strings.
 
-In other words,
-
-
+In other words, this syntax
 
 ```python
 logger.error(f"{1}")
@@ -25,17 +23,46 @@ logger.error("%s", 1)
 
 ## Motivation
 
-[This article](https://blog.pilosus.org/posts/2020/01/24/python-f-strings-in-logging/) explains it well.
+Why would we want to do this? [This article](https://blog.pilosus.org/posts/2020/01/24/python-f-strings-in-logging/) explains it pretty well.
 
-tl;dr: It fixes Sentry log integration issues.
+Mainly it's useful for Python projects using [Sentry](sentry.io)'s log integration.
 
 ## Installation
 
-Install with pre-commit, using:
+You have two options for running this pre-commit hook:
+
+
+### Python hook
+
+If you would like to install this using Python, run:
+
+```shell
+pip install printf-log-formatter
+```
+
+then set the pre-commit hook up using:
+
+```yaml
+- repo: local
+  hooks:
+  - id: printf-log-formatter
+    name: printf-log-formatter
+    entry: printf-log-formatter
+    language: system
+    types: [ python ]
+    args:
+      - --log-level=error
+      - --quotes=single  # or double
+```
+
+
+### Rust hook
+
+If you're happy to compile the Rust version, you can use:
 
 ```yaml
 - repo: https://github.com/sondrelg/printf-log-formatter
-  rev: v0.1.0
+  rev: v0.2.0
   hooks:
     - id: printf-log-formatter
       args:
