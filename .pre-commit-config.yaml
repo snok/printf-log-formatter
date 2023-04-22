@@ -32,3 +32,11 @@ repos:
       - id: disallow-file-extensions
         args:
           - --extensions=.yml
+
+  - repo: https://github.com/sondrelg/printf-log-formatter
+    rev: 'head'
+    hooks:
+      - id: printf-log-formatter
+        args:
+          - --log-level=error
+          - --quotes=single  # or double

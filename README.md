@@ -25,7 +25,7 @@ logger.error("%s", 1)
 
 Why would we want to do this? [This article](https://blog.pilosus.org/posts/2020/01/24/python-f-strings-in-logging/) explains it pretty well.
 
-Mainly it's useful for Python projects using [Sentry](sentry.io)'s log integration.
+Mainly it's useful for Python projects using [Sentry](https://sentry.io)'s log integration.
 
 ## Installation
 
@@ -62,7 +62,7 @@ If you're happy to compile the Rust version, you can use:
 
 ```yaml
 - repo: https://github.com/sondrelg/printf-log-formatter
-  rev: v0.2.0
+  rev: ''
   hooks:
     - id: printf-log-formatter
       args:
