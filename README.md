@@ -52,7 +52,6 @@ then set the pre-commit hook up using:
     types: [ python ]
     args:
       - --log-level=error
-      - --quotes=single  # or double
 ```
 
 
@@ -67,5 +66,4 @@ If you're happy to compile the Rust version, you can use:
     - id: printf-log-formatter
       args:
         - --log-level=error
-        - --quotes=single  # or double
 ```

@@ -1,5 +1,9 @@
+use anyhow::bail;
 use clap::Parser;
 use clap::ValueEnum;
+
+use crate::THREAD_LOCAL_STATE;
+use anyhow::Result;
 
 #[derive(Debug, PartialEq, Copy, Clone, PartialOrd, Eq, Ord, ValueEnum)]
 pub enum LogLevel {
@@ -25,19 +29,27 @@ impl LogLevel {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
-pub enum Quotes {
-    Single,
-    Double,
+pub fn emit_error(reason: &str) {
+    eprintln!("{reason}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new");
 }
 
-impl Quotes {
-    pub fn char(&self) -> char {
-        match self {
-            Self::Single => '\'',
-            Self::Double => '"',
-        }
+pub fn get_char(string: &str, col_offset: usize) -> Result<char> {
+    if let Some(c) = string.chars().nth(col_offset) {
+        return match c {
+            '\'' => Ok('\''),
+            '"' => Ok('"'),
+            'f' => Ok(string.chars().nth(col_offset + 1).unwrap()),
+            _ => bail!("noo"),
+        };
     }
+    emit_error("Failed to infer quote character");
+    bail!("Failed to inherit quotes")
+}
+
+pub fn get_quotes(lineno: usize, col_offset: usize) -> Result<char> {
+    let content = THREAD_LOCAL_STATE.with(|tl| tl.content.clone());
+    let vec_content = content.split('\n').map(str::to_owned).collect::<Vec<_>>();
+    get_char(&vec_content[lineno - 1], col_offset)
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -49,7 +61,4 @@ pub struct Opts {
 
     #[arg(required = true)]
     pub filenames: Vec<String>,
-
-    #[arg(value_enum, short, long, default_value_t = Quotes::Single)]
-    pub quotes: Quotes,
 }

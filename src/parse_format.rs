@@ -1,6 +1,7 @@
-use crate::ast::constant_to_string;
+use crate::cli::emit_error;
 use crate::parse_fstring::parse_formatted_value;
-use crate::FILENAME;
+use crate::visitor::constant_to_string;
+use crate::THREAD_LOCAL_STATE;
 use anyhow::bail;
 use anyhow::Result;
 use regex::Regex;
@@ -35,6 +36,7 @@ fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {
 pub fn get_args_and_keywords(
     args: &Vec<Expr>,
     keywords: &Vec<Keyword>,
+    quote: char,
 ) -> Result<(Vec<String>, Vec<NamedArg>)> {
     let mut f_named_args: Vec<NamedArg> = vec![];
     let mut f_args: Vec<String> = vec![];
@@ -54,16 +56,19 @@ pub fn get_args_and_keywords(
             }
             ExprKind::Name { id, .. } => f_args.push(id.to_string()),
             _ => {
-                let filename = FILENAME.with(std::clone::Clone::clone);
-                let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
-                eprintln!("{error_message}");
+                let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
+                emit_error(&format!(
+                    "Failed to parse `{}` line {}",
+                    filename,
+                    value.location.row()
+                ));
                 bail!("");
             }
         }
     }
 
     for arg in args {
-        f_args.push(parse_formatted_value(arg, String::new(), false)?);
+        f_args.push(parse_formatted_value(arg, String::new(), false, quote)?);
     }
 
     Ok((f_args, f_named_args))
@@ -134,7 +139,7 @@ fn order_arguments(
             // where there are more arguments passed than mapped to.
             // We could ignore these cases, but if we silently fixed them
             // that might cause other problems for the user ¯\_(ツ)_/¯
-            let filename = FILENAME.with(std::clone::Clone::clone);
+            let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
             panic!("File `{filename}` contains a str.format call with too many arguments for the string. Argument is `{arg}`. Please fix before proceeding.")
         };
         let start = mat.start();
@@ -174,9 +179,10 @@ pub fn fix_format_call(
     func: &Expr,
     args: &Vec<Expr>,
     keywords: &Vec<Keyword>,
+    quote: char,
 ) -> Result<Option<(String, Vec<String>)>> {
     // Get all arguments and named arguments from the str.format(...) call
-    let (f_args, f_named_args) = get_args_and_keywords(args, keywords)?;
+    let (f_args, f_named_args) = get_args_and_keywords(args, keywords, quote)?;
 
     // Copy the string from the str.format() call
     let mut string = String::new();

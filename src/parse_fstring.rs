@@ -1,12 +1,17 @@
-use crate::ast::{constant_to_string, operator_to_string};
+use crate::cli::emit_error;
 use crate::parse_format::get_args_and_keywords;
-use crate::{FILENAME, SETTINGS};
+use crate::visitor::{constant_to_string, operator_to_string};
+use crate::THREAD_LOCAL_STATE;
 use anyhow::bail;
 use anyhow::Result;
 use rustpython_parser::ast::{Expr, ExprKind};
 
-/// Parse `FormattedValue` AST ({something})
-pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Result<String> {
+pub fn parse_formatted_value(
+    value: &Expr,
+    postfix: String,
+    in_call: bool,
+    quote: char,
+) -> Result<String> {
     let string = match &value.node {
         // When we see a Name node we're typically handling a variable.
         // In this case, we want variables to be referenced with %s, and
@@ -23,22 +28,16 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
         // to reconstruct the entire chain of attributes + names in the end.
         ExprKind::Attribute { value, attr, .. } => {
             if postfix.is_empty() {
-                parse_formatted_value(value, attr.to_string(), false)?
+                parse_formatted_value(value, attr.to_string(), false, quote)?
             } else {
-                parse_formatted_value(value, format!("{attr}.{postfix}"), false)?
+                parse_formatted_value(value, format!("{attr}.{postfix}"), false, quote)?
             }
         }
         // A constant is a value like 1 or None.
         // We want these values to be moved out of the string.
         ExprKind::Constant { value, .. } => {
             if in_call {
-                let quotes = SETTINGS.get().unwrap().quotes.clone();
-                format!(
-                    "{}{}{}",
-                    quotes.char(),
-                    constant_to_string(value.clone()),
-                    quotes.char()
-                )
+                format!("{}{}{}", quote, constant_to_string(value.clone()), quote)
             } else {
                 constant_to_string(value.clone())
             }
@@ -51,7 +50,7 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
             args: call_args,
             keywords,
         } => {
-            let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords)?;
+            let (f_args, f_named_args) = get_args_and_keywords(call_args, keywords, quote)?;
             match &func.node {
                 ExprKind::Name { id, .. } => {
                     // Create a string with `x=y` for all named arguments and prefix it
@@ -95,15 +94,18 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
 
                     format!(
                         "{}.{}{}",
-                        parse_formatted_value(value, postfix, true)?,
+                        parse_formatted_value(value, postfix, true, quote)?,
                         attr,
                         call
                     )
                 }
                 _ => {
-                    let filename = FILENAME.with(std::clone::Clone::clone);
-                    let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, func.location.row());
-                    eprintln!("{error_message}");
+                    let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
+                    emit_error(&format!(
+                        "Failed to parse `{}` line {}",
+                        filename,
+                        func.location.row()
+                    ));
                     bail!("")
                 }
             }
@@ -111,28 +113,30 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
         ExprKind::BinOp { left, op, right } => {
             format!(
                 "{} {} {}",
-                parse_formatted_value(left, postfix.clone(), false)?,
+                parse_formatted_value(left, postfix.clone(), false, quote)?,
                 operator_to_string(op),
-                parse_formatted_value(right, postfix, false)?
+                parse_formatted_value(right, postfix, false, quote)?
             )
         }
         ExprKind::Subscript { value, slice, .. } => {
-            let quotes = SETTINGS.get().unwrap().quotes.clone();
             format!(
                 "{}[{}{}{}]",
-                parse_formatted_value(value, postfix.clone(), false)?,
-                quotes.char(),
-                parse_formatted_value(slice, postfix, false)?,
-                quotes.char()
+                parse_formatted_value(value, postfix.clone(), false, quote)?,
+                quote,
+                parse_formatted_value(slice, postfix, false, quote)?,
+                quote
             )
         }
         ExprKind::ListComp { elt, generators } | ExprKind::GeneratorExp { elt, generators } => {
-            let mut s = format!("[{}", parse_formatted_value(elt, postfix.clone(), true)?,);
+            let mut s = format!(
+                "[{}",
+                parse_formatted_value(elt, postfix.clone(), true, quote)?,
+            );
             for generator in generators {
                 s.push_str(&format!(
                     " for {} in {}",
-                    parse_formatted_value(&generator.target, postfix.clone(), true)?,
-                    parse_formatted_value(&generator.iter, postfix.clone(), true)?
+                    parse_formatted_value(&generator.target, postfix.clone(), true, quote)?,
+                    parse_formatted_value(&generator.iter, postfix.clone(), true, quote)?
                 ))
             }
             s.push(']');
@@ -145,14 +149,14 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
         } => {
             let mut s = format!(
                 "{{{}: {}",
-                parse_formatted_value(key, postfix.clone(), true)?,
-                parse_formatted_value(value, postfix.clone(), true)?,
+                parse_formatted_value(key, postfix.clone(), true, quote)?,
+                parse_formatted_value(value, postfix.clone(), true, quote)?,
             );
             for generator in generators {
                 s.push_str(&format!(
                     " for {} in {}",
-                    parse_formatted_value(&generator.target, postfix.clone(), true)?,
-                    parse_formatted_value(&generator.iter, postfix.clone(), true)?
+                    parse_formatted_value(&generator.target, postfix.clone(), true, quote)?,
+                    parse_formatted_value(&generator.iter, postfix.clone(), true, quote)?
                 ))
             }
             s.push('}');
@@ -162,17 +166,24 @@ pub fn parse_formatted_value(value: &Expr, postfix: String, in_call: bool) -> Re
             bail!("Won't handle f-strings inside f-strings")
         }
         _ => {
-            let filename = FILENAME.with(std::clone::Clone::clone);
-            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
-            eprintln!("{error_message}");
+            let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
+            emit_error(&format!(
+                "Failed to parse `{}` line {}",
+                filename,
+                value.location.row()
+            ));
             bail!("");
         }
     };
     Ok(string)
 }
 
-/// Parse f-string AST
-fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> Result<()> {
+fn parse_fstring(
+    value: &Expr,
+    string: &mut String,
+    args: &mut Vec<String>,
+    quote: char,
+) -> Result<()> {
     match &value.node {
         // When we see a constant, we can just add it back to our new string directly
         ExprKind::Constant { value, .. } => {
@@ -184,24 +195,27 @@ fn parse_fstring(value: &Expr, string: &mut String, args: &mut Vec<String>) -> R
         // a dedicated function.
         ExprKind::FormattedValue { value, .. } => {
             string.push_str("%s");
-            args.push(parse_formatted_value(value, String::new(), false)?);
+            args.push(parse_formatted_value(value, String::new(), false, quote)?);
         }
         _ => {
-            let filename = FILENAME.with(std::clone::Clone::clone);
-            let error_message = format!("Failed to parse `{}` line {}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new", filename, value.location.row());
-            eprintln!("{error_message}");
+            let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
+            emit_error(&format!(
+                "Failed to parse `{}` line {}",
+                filename,
+                value.location.row()
+            ));
             bail!("");
         }
     }
     Ok(())
 }
 
-pub fn fix_fstring(values: &[Expr]) -> Option<(String, Vec<String>)> {
+pub fn fix_fstring(values: &[Expr], quote: char) -> Option<(String, Vec<String>)> {
     let mut string = String::new();
     let mut args = vec![];
 
     for value in values {
-        match parse_fstring(value, &mut string, &mut args) {
+        match parse_fstring(value, &mut string, &mut args, quote) {
             Ok(_) => (),
             Err(_) => return None,
         }
