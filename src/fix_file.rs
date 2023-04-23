@@ -256,6 +256,8 @@ mod tests {
             TestCase { input: "logger.error(\n\tf'{1}'\n\tf'{2}',\n\texc_info=True\n)".to_string(), expected_output: "logger.error(\n\t'%s%s', 1, 2,\n\texc_info=True\n)".to_string() },
             TestCase { input: "logger.exception(f'foo {bar}')".to_string(), expected_output: "logger.exception('foo %s', bar)".to_string() },
             TestCase { input: "warnings.error(f'{1}')".to_string(), expected_output: "warnings.error(f'{1}')".to_string() },
+            // Quotes are set correctly
+            TestCase { input: "logger.error(f\"{1}\")\nlogger.error(f'{2}')".to_string(), expected_output: "logger.error(\"%s\", 1)\nlogger.error('%s', 2)".to_string() },
         ]
     }
 
