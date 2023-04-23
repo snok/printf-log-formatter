@@ -67,3 +67,11 @@ If you're happy to compile the Rust version, you can use:
       args:
         - --log-level=error
 ```
+
+## I just want to downgrade loggers once
+
+The Rust binary or Python package can also be run directly, like this:
+
+```shell
+printf-log-formatter $(find . -name "*.py") --log-level error
+```
