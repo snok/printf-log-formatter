@@ -79,14 +79,14 @@ pub fn parse_formatted_value(
                         let mut s = "(".to_string();
                         for arg in f_args {
                             // TODO: DO the whole first arg, not first arg-dance
-                            s.push_str(&format!("{},", arg))
+                            s.push_str(&format!("{arg},"));
                         }
                         for kwarg in f_named_args {
                             s.push_str(&format!(
                                 "{}={},",
                                 kwarg.key,
                                 constant_to_string(kwarg.value)
-                            ))
+                            ));
                         }
                         s.push(')');
                         s
@@ -137,7 +137,7 @@ pub fn parse_formatted_value(
                     " for {} in {}",
                     parse_formatted_value(&generator.target, postfix.clone(), true, quote)?,
                     parse_formatted_value(&generator.iter, postfix.clone(), true, quote)?
-                ))
+                ));
             }
             s.push(']');
             s
@@ -157,7 +157,7 @@ pub fn parse_formatted_value(
                     " for {} in {}",
                     parse_formatted_value(&generator.target, postfix.clone(), true, quote)?,
                     parse_formatted_value(&generator.iter, postfix.clone(), true, quote)?
-                ))
+                ));
             }
             s.push('}');
             s

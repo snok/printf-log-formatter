@@ -1,10 +1,10 @@
 use rustpython_parser::ast::{Constant, Expr, ExprKind, Keyword, Operator};
 
-use crate::cli::{emit_error, get_quotes, LogLevel};
+use crate::cli::{get_quotes, LogLevel};
 use crate::gen_visitor::Visitor;
 use crate::parse_format::fix_format_call;
 use crate::parse_fstring::fix_fstring;
-use crate::{Change, SETTINGS, THREAD_LOCAL_STATE};
+use crate::{Change, SETTINGS};
 
 // List of calls we explicitly know are unlikely to be loggers
 // for example, warnings.warn() is relatively common syntax
@@ -58,10 +58,7 @@ impl LoggerVisitor {
         } = &func.node
         {
             // Make sure the call made matches a valid log level
-            let log_level = match LogLevel::maybe_from_str(call_attr) {
-                Some(t) => t,
-                None => return,
-            };
+            let Some(log_level) = LogLevel::maybe_from_str(call_attr) else { return };
 
             // Only handle log levels above the settings value
             if SETTINGS.get().unwrap().log_level > log_level {
@@ -83,7 +80,13 @@ impl LoggerVisitor {
             // Doubt it will cause too many issues.
             if let Some(first_value) = args.get(0) {
                 match &first_value.node {
-                    ExprKind::JoinedStr { values } => self.handle_joinedstr(args, values),
+                    ExprKind::JoinedStr { values } => {
+                        for expr in args {
+                            if let ExprKind::JoinedStr { .. } = &expr.node {
+                                self.handle_joinedstr(expr, values);
+                            }
+                        }
+                    }
                     ExprKind::Call {
                         func,
                         args,
@@ -101,40 +104,30 @@ impl LoggerVisitor {
         }
     }
 
-    /// Handle f-string AST node
-    // TODO: Move the loop out one level
-    fn handle_joinedstr(&mut self, args: &Vec<Expr>, values: &[Expr]) {
-        for expr in args {
-            if let ExprKind::JoinedStr { .. } = &expr.node {
-                let quote = match get_quotes(expr.location.row(), expr.location.column()) {
-                    Ok(quote) => quote,
-                    Err(_) => {
-                        let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
-                        emit_error(&format!(
-                            "Failed to infer quote from `{}` line {}",
-                            filename,
-                            expr.location.row()
-                        ));
-                        return;
-                    }
-                };
+    fn capture_changes<F>(&mut self, expr: &Expr, values: &[Expr], conversion_fn: F)
+    where
+        F: FnOnce(&[Expr], char) -> Option<(String, Vec<String>)>,
+    {
+        let Ok(quote) = get_quotes(expr.location.row(), expr.location.column()) else { return };
 
-                if let Some((new_string_content, new_string_variables)) = fix_fstring(values, quote)
-                {
-                    if !new_string_content.is_empty() {
-                        self.changes.push(Change {
-                            lineno: expr.location.row(),
-                            col_offset: expr.location.column(),
-                            end_lineno: expr.end_location.unwrap().row(),
-                            end_col_offset: expr.end_location.unwrap().column(),
-                            new_string_content,
-                            new_string_variables,
-                            quote,
-                        });
-                    }
-                }
+        if let Some((new_string_content, new_string_variables)) = conversion_fn(values, quote) {
+            if !new_string_content.is_empty() {
+                self.changes.push(Change {
+                    lineno: expr.location.row(),
+                    col_offset: expr.location.column(),
+                    end_lineno: expr.end_location.unwrap().row(),
+                    end_col_offset: expr.end_location.unwrap().column(),
+                    new_string_content,
+                    new_string_variables,
+                    quote,
+                });
             }
         }
+    }
+
+    /// Handle f-string AST node
+    fn handle_joinedstr(&mut self, expr: &Expr, values: &[Expr]) {
+        self.capture_changes(expr, values, fix_fstring);
     }
 
     /// Handle str.format() call AST node
@@ -142,35 +135,12 @@ impl LoggerVisitor {
         &mut self,
         first_value: &Expr,
         func: &Expr,
-        args: &Vec<Expr>,
-        keywords: &Vec<Keyword>,
+        args: &[Expr],
+        keywords: &[Keyword],
     ) {
-        let quote = match get_quotes(first_value.location.row(), first_value.location.column()) {
-            Ok(quote) => quote,
-            Err(_) => {
-                let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
-                emit_error(&format!(
-                    "Failed to infer quote from `{}` line {}",
-                    filename,
-                    first_value.location.row()
-                ));
-                return;
-            }
-        };
-
-        if let Ok(Some((new_string_content, new_string_variables))) =
-            fix_format_call(func, args, keywords, quote)
-        {
-            self.changes.push(Change {
-                lineno: first_value.location.row(),
-                col_offset: first_value.location.column(),
-                end_lineno: first_value.end_location.unwrap().row(),
-                end_col_offset: first_value.end_location.unwrap().column(),
-                new_string_content,
-                new_string_variables,
-                quote,
-            });
-        }
+        self.capture_changes(first_value, args, |args, quote| {
+            fix_format_call(func, args, keywords, quote).ok().flatten()
+        });
     }
 }
 

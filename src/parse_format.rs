@@ -34,8 +34,8 @@ fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {
 }
 
 pub fn get_args_and_keywords(
-    args: &Vec<Expr>,
-    keywords: &Vec<Keyword>,
+    args: &[Expr],
+    keywords: &[Keyword],
     quote: char,
 ) -> Result<(Vec<String>, Vec<NamedArg>)> {
     let mut f_named_args: Vec<NamedArg> = vec![];
@@ -177,8 +177,8 @@ fn order(
 /// out which order they appear in, in the string itself.
 pub fn fix_format_call(
     func: &Expr,
-    args: &Vec<Expr>,
-    keywords: &Vec<Keyword>,
+    args: &[Expr],
+    keywords: &[Keyword],
     quote: char,
 ) -> Result<Option<(String, Vec<String>)>> {
     // Get all arguments and named arguments from the str.format(...) call

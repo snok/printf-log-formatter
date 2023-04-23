@@ -14,10 +14,10 @@ pub(crate) async fn fix_file() -> Result<bool> {
     let changes = get_changes(&state.content, &state.filename);
 
     // Write changes to string content
-    let (content, changed) = change_content(&state.content, changes);
+    let (content, content_changed) = change_content(&state.content, changes);
 
     // Write updated content back to file
-    if changed {
+    if content_changed {
         let mut file = File::create(&state.filename).await?;
         let cleaned_content = content
             .iter()
@@ -27,7 +27,7 @@ pub(crate) async fn fix_file() -> Result<bool> {
         file.write_all(cleaned_content.as_bytes()).await?;
     }
 
-    Ok(changed)
+    Ok(content_changed)
 }
 
 /// Parse the program and find all the changes that need to be made
@@ -73,7 +73,7 @@ fn change_content(content: &str, changes: Vec<Change>) -> (Vec<String>, bool) {
             // Add trailing comma if needed
             if let Some(last_item) = removed_lines.last() {
                 if last_item.ends_with(',') {
-                    new_logger.push(',')
+                    new_logger.push(',');
                 }
             }
 
@@ -165,7 +165,7 @@ mod tests {
             filenames: vec![],
         });
         for test_case in format_test_cases() {
-            run(test_case).await
+            run(test_case).await;
         }
     }
 
@@ -217,7 +217,7 @@ mod tests {
             filenames: vec![],
         });
         for test_case in fstring_test_cases() {
-            run(test_case).await
+            run(test_case).await;
         }
     }
 
@@ -266,7 +266,7 @@ mod tests {
             filenames: vec![],
         });
         for test_case in regression_cases() {
-            run(test_case).await
+            run(test_case).await;
         }
     }
 }

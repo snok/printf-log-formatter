@@ -49,7 +49,16 @@ pub fn get_char(string: &str, col_offset: usize) -> Result<char> {
 pub fn get_quotes(lineno: usize, col_offset: usize) -> Result<char> {
     let content = THREAD_LOCAL_STATE.with(|tl| tl.content.clone());
     let vec_content = content.split('\n').map(str::to_owned).collect::<Vec<_>>();
-    get_char(&vec_content[lineno - 1], col_offset)
+
+    if let Ok(t) = get_char(&vec_content[lineno - 1], col_offset) {
+        Ok(t)
+    } else {
+        let filename = THREAD_LOCAL_STATE.with(|tl| tl.filename.clone());
+        emit_error(&format!(
+            "Failed to infer quote from `{filename}` line {lineno}"
+        ));
+        bail!("Failed to infer quote")
+    }
 }
 
 #[derive(Parser, Debug, Clone)]
