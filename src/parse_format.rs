@@ -83,9 +83,6 @@ const FORMATTED_VALUE_REGEX: &str = r"\{.*?\}";
 // TODO: Can't we just use AST?
 const FORMATTED_VALUE_GROUP_REGEX: &str = r"\{([^{}:]*)(?::[^{}]*)?\}";
 
-// TODO: Try replacing with FORMATTED_VALUE_REGEX
-const FORMATTED_VALUE_GROUP_REGEX_COLON_CHARACTERS: &str = r"\{[^{}]*(:[^{}]*)?\}";
-
 /// Replace all keyword arguments with %s and insert each of their values
 /// into the `ordered_arguments` vector, in the right order. Something to be
 /// aware of is that this is valid Python syntax:
@@ -131,7 +128,7 @@ fn order_arguments(
     f_args: Vec<String>,
     ordered_arguments: &mut [Option<String>],
 ) {
-    let any_curly_brace_re = Regex::new(FORMATTED_VALUE_GROUP_REGEX_COLON_CHARACTERS).unwrap();
+    let any_curly_brace_re = Regex::new(FORMATTED_VALUE_REGEX).unwrap();
     for arg in f_args {
         let Some(mat) = any_curly_brace_re.find(new_string) else {
             // This will happen for syntax like
