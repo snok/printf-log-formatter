@@ -204,9 +204,11 @@ mod tests {
             // Dict comprehension
             TestCase { input: "logger.error(f'{ {\"foo\": str(e) for errors in all_errors for e in errors} }')".to_string(), expected_output: "logger.error('%s', {'foo': str(e) for errors in all_errors for e in errors})".to_string() },
             // Call containing list comprehension
-            TestCase { input: "logger.error(f'{\", \".join([str(e) for e in errors for errors in all_errors])}')".to_string(), expected_output: "logger.error('%s', ', '.join([str(e) for e in errors for errors in all_errors],))".to_string() },
+            TestCase { input: "logger.error(f'{\", \".join([str(e) for e in errors for errors in all_errors])}')".to_string(), expected_output: "logger.error('%s', ', '.join([str(e) for e in errors for errors in all_errors]))".to_string() },
             // Generator
-            TestCase { input: "logger.exception(f'{\", \".join(b for b in bs)}')".to_string(), expected_output: "logger.exception('%s', ', '.join([b for b in bs],))".to_string() },
+            TestCase { input: "logger.exception(f'{\", \".join(b for b in bs)}')".to_string(), expected_output: "logger.exception('%s', ', '.join([b for b in bs]))".to_string() },
+            // Named args in calls
+            TestCase { input: "logger.error(f'{something(1, x=2, y=4)}')".to_string(), expected_output: "logger.error('%s', something(1, x=2, y=4))".to_string() },
         ]
     }
 

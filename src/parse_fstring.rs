@@ -62,31 +62,55 @@ pub fn parse_formatted_value(
                         .join(", ");
                     if !comma_delimited_named_arguments.is_empty() {
                         comma_delimited_named_arguments =
-                            ", ".to_string() + &comma_delimited_named_arguments;
+                            "".to_string() + &comma_delimited_named_arguments;
                     }
 
                     // Finally, push the reconstructed function call to the outside of the string
                     // and just add a %s in the string.
-                    format!(
-                        "{}({}{})",
-                        id,
-                        f_args.join(", "),
-                        comma_delimited_named_arguments
-                    )
+                    if !f_args.is_empty() && !comma_delimited_named_arguments.is_empty() {
+                        format!(
+                            "{}({}, {})",
+                            id,
+                            f_args.join(", "),
+                            comma_delimited_named_arguments
+                        )
+                    } else {
+                        format!(
+                            "{}({}{})",
+                            id,
+                            f_args.join(", "),
+                            comma_delimited_named_arguments
+                        )
+                    }
                 }
                 ExprKind::Attribute { value, attr, .. } => {
                     let call = {
                         let mut s = "(".to_string();
+                        let mut first_arg = true;
+
                         for arg in f_args {
-                            // TODO: DO the whole first arg, not first arg-dance
-                            s.push_str(&format!("{arg},"));
+                            if first_arg {
+                                s.push_str(&format!("{arg}"));
+                                first_arg = false;
+                            } else {
+                                s.push_str(&format!(", {arg}"));
+                            }
                         }
                         for kwarg in f_named_args {
-                            s.push_str(&format!(
-                                "{}={},",
-                                kwarg.key,
-                                constant_to_string(kwarg.value)
-                            ));
+                            if first_arg {
+                                s.push_str(&format!(
+                                    "{}={}",
+                                    kwarg.key,
+                                    constant_to_string(kwarg.value)
+                                ));
+                                first_arg = false;
+                            } else {
+                                s.push_str(&format!(
+                                    ", {}={}",
+                                    kwarg.key,
+                                    constant_to_string(kwarg.value)
+                                ));
+                            }
                         }
                         s.push(')');
                         s
