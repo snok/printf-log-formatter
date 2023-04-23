@@ -62,7 +62,7 @@ pub fn parse_formatted_value(
                         .join(", ");
                     if !comma_delimited_named_arguments.is_empty() {
                         comma_delimited_named_arguments =
-                            "".to_string() + &comma_delimited_named_arguments;
+                            String::new() + &comma_delimited_named_arguments;
                     }
 
                     // Finally, push the reconstructed function call to the outside of the string
@@ -90,7 +90,7 @@ pub fn parse_formatted_value(
 
                         for arg in f_args {
                             if first_arg {
-                                s.push_str(&format!("{arg}"));
+                                s.push_str(&arg.to_string());
                                 first_arg = false;
                             } else {
                                 s.push_str(&format!(", {arg}"));
