@@ -25,10 +25,3 @@ repos:
     hooks:
       - id: check-github-actions
       - id: check-github-workflows
-
-  - repo: https://github.com/sondrelg/disallow-file-endings
-    rev: v0.1.0
-    hooks:
-      - id: disallow-file-extensions
-        args:
-          - --extensions=.yml

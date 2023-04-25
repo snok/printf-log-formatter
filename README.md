@@ -1,4 +1,4 @@
-<a href="https://github.com/sondrelg/printf-log-formatter"><img src="https://raw.githubusercontent.com/sondrelg/printf-log-formatter/main/logo.svg?token=GHSAT0AAAAAACAOR4AAQVLI3YMI4IZKDAYCZBS5KOA&sanitize=true" alt="logo" width="110" align="right"></a>
+<a href="https://github.com/snok/printf-log-formatter"><img src="https://raw.githubusercontent.com/snok/printf-log-formatter/main/logo.svg?token=GHSAT0AAAAAACAOR4AAQVLI3YMI4IZKDAYCZBS5KOA&sanitize=true" alt="logo" width="110" align="right"></a>
 
 # printf-log-formatter
 
@@ -60,7 +60,7 @@ then set the pre-commit hook up using:
 If you're happy to compile the Rust version, you can use:
 
 ```yaml
-- repo: https://github.com/sondrelg/printf-log-formatter
+- repo: https://github.com/snok/printf-log-formatter
   rev: ''
   hooks:
     - id: printf-log-formatter

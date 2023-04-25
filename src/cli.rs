@@ -30,7 +30,9 @@ impl LogLevel {
 }
 
 pub fn emit_error(reason: &str) {
-    eprintln!("{reason}. Please open an issue at https://github.com/sondrelg/printf-log-formatter/issues/new");
+    eprintln!(
+        "{reason}. Please open an issue at https://github.com/snok/printf-log-formatter/issues/new"
+    );
 }
 
 pub fn get_char(string: &str, col_offset: usize) -> Result<char> {

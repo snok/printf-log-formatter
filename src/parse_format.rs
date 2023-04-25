@@ -20,7 +20,11 @@ fn get_named_arg_index_start_end(re: &Regex, string: &str, key: &str) -> Result<
             return Ok((capture.start(), capture.end()));
         }
     }
-    bail!("Failed to capture named args for string '{string}'. Please submit a ticket to https://github.com/sondrelg/printf-log-formatter/issues")
+    emit_error(&format!(
+        "Failed to capture named args for string '{}'",
+        string
+    ));
+    bail!("Failed to capture named args")
 }
 
 fn get_named_arg_indexes(re: &Regex, string: &str, key: &str) -> Vec<usize> {

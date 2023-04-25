@@ -29,5 +29,5 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/sondrelg/printf-log-formatter"
-Changelog = "https://github.com/sondrelg/printf-log-formatter/releases"
+Repository = "https://github.com/snok/printf-log-formatter"
+Changelog = "https://github.com/snok/printf-log-formatter/releases"
